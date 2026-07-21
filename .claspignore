@@ -1,0 +1,7 @@
+node_modules/**
+local-tests/**
+.git/**
+.github/**
+package*.json
+tsconfig.json
+jest.config.*

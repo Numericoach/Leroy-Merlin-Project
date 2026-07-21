@@ -1,34 +1,33 @@
 // Soumission formulaire 
-function onSubmit(e) {
-  // Vider le cache pour actualiser le nombre de places restantes sur le site
-  try {
-    clearSessionsCache();
-  } catch (err) {
-    Logger.log("Erreur lors du vidage du cache : " + err);
-  }
+function onSubmit(e?: GoogleAppsScript.Events.SheetsOnFormSubmit): void {
+  if (!e || !e.range) return;
 
   createEventSession();
 
   const thisResponses = e.range.getValues()[0];
   const thisSheetName = e.range.getSheet().getSheetName();
 
-  if (thisSheetName == "INSCRIPTIONSS") {
+  if (thisSheetName === "INSCRIPTIONSS") {
     const thisTime = thisResponses[0];
-    const thisEmail = thisResponses[9];    // Colonne J (10ème colonne, index 9)
-    const thisSession = thisResponses[5];  // Colonne F (6ème colonne, index 5)
+    const thisEmail = thisResponses[9] as string;    // Colonne J (10ème colonne, index 9)
+    const thisSession = thisResponses[5] as string;  // Colonne F (6ème colonne, index 5)
     if (!thisSession) return;
-    const thisSessionid = thisSession.match(/\[(.*)\]/)[1];
+    
+    const match = thisSession.match(/\[(.*)\]/);
+    if (!match) return;
+    const thisSessionid = match[1];
     
     // VERIFIER SI DEJA INSCRIT ? 
+    if (!sheetInscriptions) return;
     const maxRows = sheetInscriptions.getMaxRows();
-    let verif = [];
+    let verif: any[][] = [];
     if (maxRows > 1) {
       const sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-      verif = sessionsEmail.filter(row => (row[0] == thisSessionid && row[1] == thisEmail));
+      verif = sessionsEmail.filter(row => (row[0] === thisSessionid && row[1] === thisEmail));
     }
     
     if (verif.length > 0) {
-      // DEJA INCRIT
+      // DEJA INSCRIT
       Logger.log("Déjà inscrit : " + thisEmail + " à " + thisSessionid);
     } else {
       // INSCRIPTION 
@@ -48,8 +47,9 @@ function onSubmit(e) {
 }
 
 // Mettre à jour dynamiquement les choix du Google Form
-function updateFormChoices() {
-  const formId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_INSCRIPTION"]).getValue();
+function updateFormChoices(): void {
+  if (!sheetParametres) return;
+  const formId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_INSCRIPTION"]).getValue() as string;
   if (!formId) {
     Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
     return;
@@ -57,7 +57,7 @@ function updateFormChoices() {
 
   const form = FormApp.openById(formId);
   const items = form.getItems(FormApp.ItemType.LIST);
-  let sessionItem = null;
+  let sessionItem: GoogleAppsScript.Forms.ListItem | null = null;
 
   for (let i = 0; i < items.length; i++) {
     if (items[i].getTitle().indexOf("Inscription à la formation suivante") > -1) {
@@ -78,7 +78,7 @@ function updateFormChoices() {
   if (lastRow < 2) return;
 
   const values = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
-  const choices = [];
+  const choices: string[] = [];
 
   values.forEach(function(row) {
     const sessionId = row[0];
@@ -103,12 +103,14 @@ function updateFormChoices() {
 }
 
 // INSCRIPTION
-function inscription(time, sessionId, email) {
-  // ajouter l'inscription 
-  sheetInscriptions.appendRow([time, sessionId, email]);
+function inscription(time: any, sessionId: string, email: string): void {
+  if (sheetInscriptions) {
+    sheetInscriptions.appendRow([time, sessionId, email]);
+  }
 }
 
-function reparePdf() {
+function reparePdf(): void {
+  if (!sheetInscription) return;
   const valuesInscriptions = sheetInscription.getDataRange().getValues();
   valuesInscriptions.forEach(function (row, i) {
     if (i > 0) {
@@ -118,8 +120,7 @@ function reparePdf() {
       const thisConvocation = row[12];
       const thisDateSession = row[13];
 
-      if (thisConvocation == "" && thisEmail != "") {
-        // Date 1/10/2021 = 44470
+      if (thisConvocation === "" && thisEmail !== "") {
         if (thisDateSession >= 44470) {
           Logger.log("à réparer : " + thisEmail + " " + thisSessionid );
           inscription(thisTime, thisSessionid, thisEmail);
@@ -130,13 +131,22 @@ function reparePdf() {
   });
 }
 
+// Helper pour remplacer plusieurs variables dans un Element Google Doc
+function replaceDocVariables(docElement: { replaceText(searchPattern: string, replacement: string): any }, replacements: Record<string, string>): void {
+  for (const [key, value] of Object.entries(replacements)) {
+    docElement.replaceText(key, value || "");
+  }
+}
+
 // CONVOCATION + MAIL 
-function sendConvocationMail(thisSessionId, thisEmail) {
+function sendConvocationMail(thisSessionId: string, thisEmail: string): void {
   SpreadsheetApp.flush();
   
+  if (!sheetInscriptions || !sheetParametres) return;
+
   // RECUPERATION DES INFORMATIONS
   const inscriptionsValues = sheetInscriptions.getDataRange().getDisplayValues();
-  let thisInscriptions = inscriptionsValues.filter(row => (row[1] == thisSessionId && row[2] == thisEmail));
+  let thisInscriptions = inscriptionsValues.filter(row => (row[1] === thisSessionId && row[2] === thisEmail));
   if (thisInscriptions.length === 0) return;
 
   const thisInscription = thisInscriptions[0];
@@ -167,10 +177,10 @@ function sendConvocationMail(thisSessionId, thisEmail) {
   const thisLieuCp = thisInscription[19];
   const thisLieuVille = thisInscription[20];
   
-  const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue();
+  const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue() as string;
   const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
 
-  const folderConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue();
+  const folderConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() as string;
   const folderConvocation = DriveApp.getFolderById(folderConvocationId);
 
   const convocationName = "convocation " + thisSessionId + " " + thisPrenom + " " + thisNom;
@@ -180,46 +190,31 @@ function sendConvocationMail(thisSessionId, thisEmail) {
   const docConvocation = DocumentApp.openByUrl(convocationUrl);
   const docConvocationBody = docConvocation.getBody();
 
-  // remplacer les champs :
-  docConvocationBody
-    .replaceText("{{DATE AUJOURDHUI}}", dateAujourdhui)
-    .replaceText("{{CIVILITE}}", thisCivilite)
-    .replaceText("{{PRENOM}}", thisPrenom)
-    .replaceText("{{NOM}}", thisNom)
-    .replaceText("{{SESSION ID}}", thisSessionId)
-    .replaceText("{{TITRE FORMATION}}", thisTitreFormation)
-    .replaceText("{{DATE}}", thisDate)
-    .replaceText("{{HEURE DEBUT}}", thisHeureDebut)
-    .replaceText("{{HEURE FIN}}", thisHeureFin)
-    .replaceText("{{LIEU}}", thisLieu)
-    .replaceText("{{ADRESSE LIEU}}", thisLieuAdresse)
-    .replaceText("{{CP}}", thisLieuCp)
-    .replaceText("{{VILLE}}", thisLieuVille)
-    .replaceText("{{INFOS COMPLEMENTAIRES}}", thisLieuAcces)
-    .replaceText("{{DESCRIPTION}}", thisDescription)
-    .replaceText("{{APPLI}}", thisAppli)
-    .replaceText("{{COMPETENCES}}", thisCompetences);
+  const replacements: Record<string, string> = {
+    "{{DATE AUJOURDHUI}}": dateAujourdhui,
+    "{{CIVILITE}}": thisCivilite,
+    "{{PRENOM}}": thisPrenom,
+    "{{NOM}}": thisNom,
+    "{{SESSION ID}}": thisSessionId,
+    "{{TITRE FORMATION}}": thisTitreFormation,
+    "{{DATE}}": thisDate,
+    "{{HEURE DEBUT}}": thisHeureDebut,
+    "{{HEURE FIN}}": thisHeureFin,
+    "{{LIEU}}": thisLieu,
+    "{{ADRESSE LIEU}}": thisLieuAdresse,
+    "{{CP}}": thisLieuCp,
+    "{{VILLE}}": thisLieuVille,
+    "{{INFOS COMPLEMENTAIRES}}": thisLieuAcces,
+    "{{DESCRIPTION}}": thisDescription,
+    "{{APPLI}}": thisAppli,
+    "{{COMPETENCES}}": thisCompetences
+  };
+
+  replaceDocVariables(docConvocationBody, replacements);
 
   const docConvocationFooter = docConvocation.getFooter();
   if (docConvocationFooter) {
-    docConvocationFooter
-      .replaceText("{{DATE AUJOURDHUI}}", dateAujourdhui)
-      .replaceText("{{CIVILITE}}", thisCivilite)
-      .replaceText("{{PRENOM}}", thisPrenom)
-      .replaceText("{{NOM}}", thisNom)
-      .replaceText("{{SESSION ID}}", thisSessionId)
-      .replaceText("{{TITRE FORMATION}}", thisTitreFormation)
-      .replaceText("{{DATE}}", thisDate)
-      .replaceText("{{HEURE DEBUT}}", thisHeureDebut)
-      .replaceText("{{HEURE FIN}}", thisHeureFin)
-      .replaceText("{{LIEU}}", thisLieu)
-      .replaceText("{{ADRESSE LIEU}}", thisLieuAdresse)
-      .replaceText("{{CP}}", thisLieuCp)
-      .replaceText("{{VILLE}}", thisLieuVille)
-      .replaceText("{{INFOS COMPLEMENTAIRES}}", thisLieuAcces)
-      .replaceText("{{DESCRIPTION}}", thisDescription)
-      .replaceText("{{APPLI}}", thisAppli)
-      .replaceText("{{COMPETENCES}}", thisCompetences);
+    replaceDocVariables(docConvocationFooter, replacements);
   }
 
   docConvocation.saveAndClose();
@@ -230,7 +225,6 @@ function sendConvocationMail(thisSessionId, thisEmail) {
   pdfFileConvocation.moveTo(folderConvocation);
   const pdfFileUrl = pdfFileConvocation.getUrl();
 
-  // Mettre à la corbeille le document de travail temporaire
   try {
     convocation.setTrashed(true);
   } catch (err) {
@@ -253,7 +247,7 @@ function sendConvocationMail(thisSessionId, thisEmail) {
   const urlDesinscription = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_DESINSCRIPTION"]).getValue();
   const thisDesinscriptionLink = "https://docs.google.com/forms/d/e/" + urlDesinscription + "/viewform?usp=pp_url&entry.193822625=" + thisEmail + "&entry.2116080188=" + thisTitreFormation + " " + thisDate + "[" + thisSessionId + "]";
 
-  if (messageConnexion != "") {
+  if (messageConnexion !== "") {
     messageinterne += "<h3>Pour participer à la formation</h3>" + messageConnexion;
   }
 
@@ -316,24 +310,29 @@ function sendConvocationMail(thisSessionId, thisEmail) {
   const ssSessionEvent = ss.getSheetByName("SESSION AGENDA");
   if (ssSessionEvent) {
     const values = ssSessionEvent.getDataRange().getValues();
-    let sessionEvent = {};
+    let sessionEvent: Record<string, string> = {};
     values.forEach(function (row) {
       sessionEvent[row[1]] = row[2];
     });
 
     const idEventAgenda = sessionEvent[thisSessionId];
-    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue();
+    if (!sheetParametres) return;
+    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
     const agenda = CalendarApp.getCalendarById(agendaId);
-    let event = agenda.getEventById(idEventAgenda);
-    if (event) {
-      event.addGuest(thisEmail);
+    if (agenda && idEventAgenda) {
+      let event = agenda.getEventById(idEventAgenda);
+      if (event) {
+        event.addGuest(thisEmail);
+      }
     }
   }
 }
 
-function creerPdfMailAgenda(i, thisRange) {
-  const mailFormation = sheetParametres.getRange(pnParaCel["PARAMETRE_EMAIL"]).getValue();
-  const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue();
+function creerPdfMailAgenda(i: number, thisRange: any[]): void {
+  if (!sheetParametres || !sheetInscription) return;
+
+  const mailFormation = sheetParametres.getRange(pnParaCel["PARAMETRE_EMAIL"]).getValue() as string;
+  const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
 
   const thisMail = thisRange[1];
   const thisSessionId = thisRange[2];
@@ -363,10 +362,10 @@ function creerPdfMailAgenda(i, thisRange) {
   const dateAujourdhui = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy');
 
   // CREATION DE LA CONVOCATION 
-  const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue();
+  const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue() as string;
   const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
 
-  const folderConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue();
+  const folderConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() as string;
   const folderConvocation = DriveApp.getFolderById(folderConvocationId);
 
   const convocationName = "convocation " + thisSessionId + " " + thisPrenom + " " + thisNom;
@@ -377,38 +376,40 @@ function creerPdfMailAgenda(i, thisRange) {
   const docConvocationBody = docConvocation.getBody();
 
   // Rechercher Element Image
-  if (thisAppliImageLink != "") {
+  if (thisAppliImageLink && thisAppliImageLink !== "") {
     let idImage = thisAppliImageLink.match(/[-\w]{25,}/);
     if (idImage) {
       let imageAppliBlob = DriveApp.getFileById(idImage[0]).getBlob();
       let imageAppli = docConvocationBody.insertImage(15, imageAppliBlob);
-      let style = {};
-      style[DocumentApp.Attribute.WIDTH] = 40;
-      style[DocumentApp.Attribute.HEIGHT] = 40;
-      style[DocumentApp.Attribute.HORIZONTAL_ALIGNMENT] = "CENTER";
-      imageAppli.setAttributes(style);
+      let style: Record<string, any> = {};
+      style[DocumentApp.Attribute.WIDTH as any] = 40;
+      style[DocumentApp.Attribute.HEIGHT as any] = 40;
+      style[DocumentApp.Attribute.HORIZONTAL_ALIGNMENT as any] = DocumentApp.HorizontalAlignment.CENTER;
+      imageAppli.setAttributes(style as any);
     }
   }
 
-  // remplacer les champs :
-  docConvocationBody
-    .replaceText("{{DATE AUJOURDHUI}}", dateAujourdhui)
-    .replaceText("{{CIVILITE}}", thisCivilite)
-    .replaceText("{{PRENOM}}", thisPrenom)
-    .replaceText("{{NOM}}", thisNom)
-    .replaceText("{{SESSION ID}}", thisSessionId)
-    .replaceText("{{TITRE FORMATION}}", thisTitreFormation)
-    .replaceText("{{DATE}}", thisDate)
-    .replaceText("{{HEURE DEBUT}}", thisHeureDebut)
-    .replaceText("{{HEURE FIN}}", thisHeureFin)
-    .replaceText("{{LIEU}}", thisLieu)
-    .replaceText("{{ADRESSE LIEU}}", thisLieuAdresse)
-    .replaceText("{{CP}}", thisLieuCp)
-    .replaceText("{{VILLE}}", thisLieuVille)
-    .replaceText("{{INFOS COMPLEMENTAIRES}}", thisLieuAcces)
-    .replaceText("{{DESCRIPTION}}", thisDescription)
-    .replaceText("{{APPLI}}", thisAppli)
-    .replaceText("{{COMPETENCES}}", thisCompetences);
+  const replacements: Record<string, string> = {
+    "{{DATE AUJOURDHUI}}": dateAujourdhui,
+    "{{CIVILITE}}": thisCivilite,
+    "{{PRENOM}}": thisPrenom,
+    "{{NOM}}": thisNom,
+    "{{SESSION ID}}": thisSessionId,
+    "{{TITRE FORMATION}}": thisTitreFormation,
+    "{{DATE}}": thisDate,
+    "{{HEURE DEBUT}}": thisHeureDebut,
+    "{{HEURE FIN}}": thisHeureFin,
+    "{{LIEU}}": thisLieu,
+    "{{ADRESSE LIEU}}": thisLieuAdresse,
+    "{{CP}}": thisLieuCp,
+    "{{VILLE}}": thisLieuVille,
+    "{{INFOS COMPLEMENTAIRES}}": thisLieuAcces,
+    "{{DESCRIPTION}}": thisDescription,
+    "{{APPLI}}": thisAppli,
+    "{{COMPETENCES}}": thisCompetences
+  };
+
+  replaceDocVariables(docConvocationBody, replacements);
 
   docConvocation.saveAndClose();
 
@@ -434,7 +435,7 @@ function creerPdfMailAgenda(i, thisRange) {
     + "<p style='font-size:16px; font-weight:bold ; text-align:center;'>" + thisTitreFormation + "</p>"
     + "<p style='font-size:16px; text-align:center;'><b>" + thisDate + "</b> de <b>" + thisHeureDebut + "</b> à <b>" + thisHeureFin + "</b> en " + thisLieu + "</p>";
 
-  if (messageConnexion != "") {
+  if (messageConnexion !== "") {
     messageinterne += "<h3>Pour participer à la formation</h3>" + messageConnexion;
   }
 
@@ -497,16 +498,18 @@ function creerPdfMailAgenda(i, thisRange) {
   const ssSessionEvent = ss.getSheetByName("SESSION AGENDA");
   if (ssSessionEvent) {
     const values = ssSessionEvent.getDataRange().getValues();
-    let sessionEvent = {};
+    let sessionEvent: Record<string, string> = {};
     values.forEach(function (row) {
       sessionEvent[row[1]] = row[2];
     });
 
     const idEventAgenda = sessionEvent[thisSessionId];
     const agenda = CalendarApp.getCalendarById(agendaId);
-    let event = agenda.getEventById(idEventAgenda);
-    if (event) {
-      event.addGuest(thisMail);
+    if (agenda && idEventAgenda) {
+      let event = agenda.getEventById(idEventAgenda);
+      if (event) {
+        event.addGuest(thisMail);
+      }
     }
   }
 }
