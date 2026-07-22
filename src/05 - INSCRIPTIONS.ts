@@ -372,7 +372,7 @@ function updateFormChoices(): void {
  * Envoi d'un e-mail d'information et d'inscription sur Liste d'Attente lorsque la session est complète ou insuffisante
  */
 function sendWaitingListMail(sessionId: string, email: string, prenom?: string, nom?: string, remainingSeats?: number, requestedSeats?: number): void {
-  const formListeAttenteId = getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE");
+  const formListeAttenteId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
   
@@ -426,7 +426,13 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
     mailOptions.replyTo = senderEmail;
   }
 
-  MailApp.sendEmail(mailOptions);
+  try {
+    MailApp.sendEmail(mailOptions);
+  } catch (err) {
+    Logger.log("Avertissement expéditeur personnalisé : " + err + ". Tentative d'envoi avec l'expéditeur par défaut...");
+    delete mailOptions.from;
+    MailApp.sendEmail(mailOptions);
+  }
   Logger.log("Mail de liste d'attente envoyé à " + email + " pour la session " + sessionId);
 }
 
@@ -434,7 +440,7 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
  * Envoi de l'e-mail de convocation / confirmation personnalisé avec le PDF complet
  */
 function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants?: number): void {
-  const urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
+  const urlDesinscription = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
   
@@ -543,7 +549,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmed.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
@@ -575,7 +581,13 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     mailOptions.attachments = [pdfAttachment];
   }
 
-  MailApp.sendEmail(mailOptions);
+  try {
+    MailApp.sendEmail(mailOptions);
+  } catch (err) {
+    Logger.log("Avertissement expéditeur personnalisé : " + err + ". Tentative d'envoi avec l'expéditeur par défaut...");
+    delete mailOptions.from;
+    MailApp.sendEmail(mailOptions);
+  }
   Logger.log("Mail de convocation envoyé à " + email + " pour la session " + sessionId);
 }
 
