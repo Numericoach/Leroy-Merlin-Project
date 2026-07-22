@@ -254,13 +254,7 @@ function updateFormChoices(): void {
     try {
       form = FormApp.openById(formId);
     } catch (openErr) {
-      Logger.log("Erreur lors de l'ouverture du formulaire ID '" + formId + "' : " + openErr);
-      try {
-        const ui = SpreadsheetApp.getUi();
-        if (ui) {
-          ui.alert("Formulaire introuvable", "Impossible d'ouvrir le Google Form avec l'ID d'édition (" + formId + "). Vérifiez que l'ID est bien l'ID d'édition du formulaire.", ui.ButtonSet.OK);
-        }
-      } catch (e) {}
+      Logger.log("Avertissement : impossible d'ouvrir le Google Form avec l'ID '" + formId + "' : " + openErr);
       return;
     }
 

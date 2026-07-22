@@ -26,13 +26,6 @@ function setupTriggers(): void {
     .create();
 
   Logger.log("Déclencheurs 'onSubmit' et 'onEditTrigger' installés avec succès !");
-  
-  try {
-    const ui = SpreadsheetApp.getUi();
-    if (ui) {
-      ui.alert("Installation réussie", "Les déclencheurs automatiques d'inscription et de mise à jour des sessions ont été correctement configurés.", ui.ButtonSet.OK);
-    }
-  } catch (e) {}
 }
 
 /**
