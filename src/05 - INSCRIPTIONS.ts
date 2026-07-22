@@ -11,7 +11,7 @@ function onSubmit(e?: any): void {
   }
 
   try {
-    let thisTime: any = new Date();
+    let thisTime: any = null;
     let thisEmail = "";
     let thisSession = "";
     let thisCivilite = "";
@@ -22,7 +22,18 @@ function onSubmit(e?: any): void {
     if (e && e.range) {
       try {
         thisSheetName = e.range.getSheet().getName();
+        thisTime = e.range.getValues()[0][0]; // Timestamp exact de la cellule soumise par le Form
       } catch (err) {}
+    }
+
+    if (!thisTime && e && e.namedValues && e.namedValues["Horodateur"]) {
+      thisTime = e.namedValues["Horodateur"][0];
+    }
+    if (!thisTime && e && e.values && e.values[0]) {
+      thisTime = e.values[0];
+    }
+    if (!thisTime) {
+      thisTime = new Date();
     }
 
     // 1. EXTRACTION INTELLIGENTE DES DONNÉES DE LA SOUMISSION
@@ -49,7 +60,6 @@ function onSubmit(e?: any): void {
     }
 
     if (e && e.values && Array.isArray(e.values)) {
-      if (!thisTime) thisTime = e.values[0];
       if (!thisEmail && e.values[1] && e.values[1].indexOf("@") > -1) thisEmail = e.values[1];
       if (!thisCivilite && e.values[2]) thisCivilite = e.values[2];
       if (!thisPrenom && e.values[3]) thisPrenom = e.values[3];
@@ -69,7 +79,6 @@ function onSubmit(e?: any): void {
     if ((!thisEmail || !thisSession) && e && e.range) {
       const rowValues = e.range.getValues()[0];
       if (rowValues && rowValues.length > 0) {
-        if (!thisTime) thisTime = rowValues[0];
         if (!thisEmail && rowValues[1] && rowValues[1].toString().indexOf("@") > -1) thisEmail = rowValues[1].toString().trim();
         if (!thisCivilite && rowValues[2]) thisCivilite = rowValues[2].toString().trim();
         if (!thisPrenom && rowValues[3]) thisPrenom = rowValues[3].toString().trim();
@@ -134,7 +143,7 @@ function onSubmit(e?: any): void {
       return;
     }
 
-    // 4. INSCRIPTION DANS LE SHEETS
+    // 4. INSCRIPTION DANS LE SHEETS AVEC L'HORODATEUR EXACT DU FORMULAIRE
     inscription(thisTime, thisSessionid, thisEmail);
 
     // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
@@ -163,7 +172,7 @@ function onSubmit(e?: any): void {
 }
 
 /**
- * Enregistrer l'inscription dans la feuille de calcul
+ * Enregistrer l'inscription dans la feuille de calcul avec le timestamp exact du formulaire
  */
 function inscription(time: any, sessionId: string, email: string): void {
   if (sheetInscriptions) {

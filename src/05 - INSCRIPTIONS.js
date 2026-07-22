@@ -7,7 +7,7 @@ function onSubmit(e) {
   }
 
   try {
-    var thisTime = new Date();
+    var thisTime = null;
     var thisEmail = "";
     var thisSession = "";
     var thisCivilite = "";
@@ -18,7 +18,18 @@ function onSubmit(e) {
     if (e && e.range) {
       try {
         thisSheetName = e.range.getSheet().getName();
+        thisTime = e.range.getValues()[0][0];
       } catch (err) {}
+    }
+
+    if (!thisTime && e && e.namedValues && e.namedValues["Horodateur"]) {
+      thisTime = e.namedValues["Horodateur"][0];
+    }
+    if (!thisTime && e && e.values && e.values[0]) {
+      thisTime = e.values[0];
+    }
+    if (!thisTime) {
+      thisTime = new Date();
     }
 
     if (e && e.namedValues) {
@@ -44,7 +55,6 @@ function onSubmit(e) {
     }
 
     if (e && e.values && Array.isArray(e.values)) {
-      if (!thisTime) thisTime = e.values[0];
       if (!thisEmail && e.values[1] && e.values[1].indexOf("@") > -1) thisEmail = e.values[1];
       if (!thisCivilite && e.values[2]) thisCivilite = e.values[2];
       if (!thisPrenom && e.values[3]) thisPrenom = e.values[3];
@@ -64,7 +74,6 @@ function onSubmit(e) {
     if ((!thisEmail || !thisSession) && e && e.range) {
       var rowValues = e.range.getValues()[0];
       if (rowValues && rowValues.length > 0) {
-        if (!thisTime) thisTime = rowValues[0];
         if (!thisEmail && rowValues[1] && rowValues[1].toString().indexOf("@") > -1) thisEmail = rowValues[1].toString().trim();
         if (!thisCivilite && rowValues[2]) thisCivilite = rowValues[2].toString().trim();
         if (!thisPrenom && rowValues[3]) thisPrenom = rowValues[3].toString().trim();
