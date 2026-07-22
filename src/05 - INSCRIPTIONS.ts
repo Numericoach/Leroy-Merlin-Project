@@ -126,9 +126,9 @@ function onSubmit(e?: any): void {
       }
     }
 
-    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU DANS L'ONGLET SESSIONS
+    // 2. VÉRIFIER LES PLACES RESTANTES DANS L'ONGLET SESSIONS (APRÈS AJOUT PAR GOOGLE FORM)
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
-    let remainingSeats = 0;
+    let remainingSeatsAfterForm = 0;
     let sessionFound = false;
 
     if (sheetSessions) {
@@ -138,7 +138,7 @@ function onSubmit(e?: any): void {
         for (let i = 0; i < sessionsData.length; i++) {
           const idInSheet = (sessionsData[i][0] || "").toString().trim();
           if (idInSheet === thisSessionid) {
-            remainingSeats = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
+            remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes déjà calculées avec la soumission actuelle)
             sessionFound = true;
             break;
           }
@@ -148,13 +148,17 @@ function onSubmit(e?: any): void {
 
     if (!sessionFound) {
       Logger.log("Avertissement : ID Session " + thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
-      remainingSeats = 999; // Si session non trouvée dans SESSIONS, autoriser par sécurité
+      remainingSeatsAfterForm = 0; // Si session non trouvée dans SESSIONS, autoriser par sécurité
     }
 
-    if (remainingSeats < thisNbParticipants) {
-      Logger.log("Inscription refusée : pas assez de places disponibles (" + remainingSeats + " restantes, " + thisNbParticipants + " demandées) pour " + thisSessionid);
+    // Comme Google Form insère la ligne D'ABORD dans INSCRIPTIONSS, la colonne M de SESSIONS contient déjà :
+    // (Places Restantes Avant) - (thisNbParticipants).
+    // Si remainingSeatsAfterForm < 0, cela signifie que la demande dépasse la capacité disponible !
+    if (remainingSeatsAfterForm < 0) {
+      const availableBefore = remainingSeatsAfterForm + thisNbParticipants;
+      Logger.log("Inscription refusée : dépassement de capacité (" + availableBefore + " disponibles avant, " + thisNbParticipants + " demandées) pour " + thisSessionid);
       try {
-        sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom, remainingSeats, thisNbParticipants);
+        sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom, Math.max(0, availableBefore), thisNbParticipants);
       } catch (waitErr) {
         Logger.log("Erreur lors de l'envoi de l'e-mail de liste d'attente : " + waitErr);
       }
