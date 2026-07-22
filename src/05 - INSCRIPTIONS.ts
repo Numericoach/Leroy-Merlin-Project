@@ -133,6 +133,11 @@ function onSubmit(e?: any): void {
 
     if (remainingSeats < thisNbParticipants) {
       Logger.log("Inscription refusée : pas assez de places disponibles (" + remainingSeats + " restantes, " + thisNbParticipants + " demandées) pour " + thisSessionid);
+      try {
+        sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom, remainingSeats, thisNbParticipants);
+      } catch (waitErr) {
+        Logger.log("Erreur lors de l'envoi de l'e-mail de liste d'attente : " + waitErr);
+      }
       return;
     }
 
@@ -243,6 +248,58 @@ function updateFormChoices(): void {
     sessionItem.setChoiceValues(["Aucune session disponible pour le moment"]);
     Logger.log("Aucune session disponible.");
   }
+}
+
+/**
+ * Envoi d'un e-mail d'information et d'inscription sur Liste d'Attente lorsque la session est complète ou insuffisante
+ */
+function sendWaitingListMail(sessionId: string, email: string, prenom?: string, nom?: string, remainingSeats?: number, requestedSeats?: number): void {
+  const formListeAttenteId = getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE");
+  
+  let entrySessionId = "entry.2116080188";
+  const customEntry = getParamValue("PARAMETRE_ENTRY_SESSION");
+  if (customEntry) entrySessionId = customEntry;
+
+  let entryEmailId = "entry.193822625";
+  const customEmailEntry = getParamValue("PARAMETRE_ENTRY_EMAIL");
+  if (customEmailEntry) entryEmailId = customEmailEntry;
+
+  let listeAttenteLink = "#";
+  if (formListeAttenteId) {
+    listeAttenteLink = "https://docs.google.com/forms/d/e/" + formListeAttenteId + 
+      "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
+      "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
+  }
+
+  const subject = "Session complète - Option Liste d'Attente - Formation Leroy Merlin [" + sessionId + "]";
+  
+  let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
+    + "<div style='background-color: #E67E22; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0;'>Session Complète - Liste d'Attente</h2>"
+    + "</div>"
+    + "<div style='padding: 24px;'>"
+    + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
+    + "<p>Nous avons bien reçu votre demande d'inscription pour <b>" + (requestedSeats || 1) + " participant(s)</b> à la session <b>[" + sessionId + "]</b>.</p>"
+    + "<p style='color: #C0392B;'><b>Information importante :</b> Cette session ne dispose plus de places suffisantes (" + (remainingSeats && remainingSeats > 0 ? remainingSeats + " place(s) restante(s)" : "session complète") + ").</p>"
+    + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>Liste d'Attente</b> :</p>";
+
+  if (formListeAttenteId) {
+    htmlBody += "<p style='text-align: center; margin: 25px 0;'><a href='" + listeAttenteLink + "' style='display:inline-block; background-color:#E67E22; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>Rejoindre la Liste d'Attente</a></p>";
+  } else {
+    htmlBody += "<p><i>Vous serez recontacté dès qu’une nouvelle session sera ouverte.</i></p>";
+  }
+
+  htmlBody += "</div>"
+    + "<div style='background-color: #f9f9f9; padding: 12px; text-align: center; font-size: 12px; color: #777;'>"
+    + "Numericoach &bull; Gestion des Formations Leroy Merlin"
+    + "</div></div>";
+
+  MailApp.sendEmail({
+    to: email,
+    subject: subject,
+    htmlBody: htmlBody
+  });
+  Logger.log("Mail de liste d'attente envoyé à " + email + " pour la session " + sessionId);
 }
 
 /**
