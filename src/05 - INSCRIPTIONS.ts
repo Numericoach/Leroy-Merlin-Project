@@ -68,7 +68,7 @@ function onSubmit(e?: GoogleAppsScript.Events.SheetsOnFormSubmit): void {
       // 4. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
       addParticipantToCalendar(thisSessionid, thisEmail);
 
-      // 5. FONCTION SECONDAIRE : ENVOI DE L'E-MAIL DE CONFIRMATION (Découplé)
+      // 5. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
       try {
         sendConfirmationMail(thisSessionid, thisEmail);
       } catch (mailErr) {
@@ -159,14 +159,13 @@ function updateFormChoices(): void {
 }
 
 /**
- * Envoi d'un e-mail de confirmation léger sans dépendance aux PDF
+ * Envoi de l'e-mail de convocation / confirmation avec gestion optionnelle du PDF si modèle présent
  */
 function sendConfirmationMail(sessionId: string, email: string): void {
   if (!sheetParametres) return;
 
   const urlDesinscription = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_DESINSCRIPTION"]).getValue() || "";
   
-  // Utiliser l'ID de champ réel si configuré dans PARAMETRES
   let entrySessionId = "entry.2116080188";
   if (pnParaCel["PARAMETRE_ENTRY_SESSION"]) {
     const customEntry = sheetParametres.getRange(pnParaCel["PARAMETRE_ENTRY_SESSION"]).getValue();
@@ -183,18 +182,78 @@ function sendConfirmationMail(sessionId: string, email: string): void {
     "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
-  const subject = "Confirmation d'inscription à votre session de formation Leroy Merlin";
-  const htmlBody = "<h3>Bonjour,</h3>"
-    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été enregistrée.</p>"
-    + "<p>Une invitation Google Agenda vous a été envoyée avec le lien de connexion et le programme.</p>"
-    + "<p><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Cliquer ici pour vous désinscrire</a></p>"
-    + "<br><p>Cordialement,<br>L’équipe Numericoach</p>";
+  const connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "Lien Meet inclus dans votre invitation Agenda";
 
-  MailApp.sendEmail({
+  // Optionnel : Générer le PDF de convocation si l'ID du modèle est renseigné dans PARAMETRES
+  let pdfAttachment: GoogleAppsScript.Base.Blob | null = null;
+  let pdfUrl = "";
+
+  try {
+    if (pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]) {
+      const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue() as string;
+      if (modeleConvocationId && modeleConvocationId.length > 10) {
+        const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
+        const folderConvocationId = pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"] ? sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() as string : "";
+        const folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
+        
+        const convocationName = "Convocation_" + sessionId + "_" + email;
+        const convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
+        const doc = DocumentApp.openById(convocationDoc.getId());
+        const body = doc.getBody();
+
+        body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
+        body.replaceText("{{SESSION ID}}", sessionId);
+        body.replaceText("{{EMAIL}}", email);
+        doc.saveAndClose();
+
+        pdfAttachment = convocationDoc.getAs('application/pdf');
+        pdfAttachment.setName(convocationName + ".pdf");
+        const pdfFile = folderConvocation.createFile(pdfAttachment);
+        pdfUrl = pdfFile.getUrl();
+
+        try { convocationDoc.setTrashed(true); } catch (e) {}
+      }
+    }
+  } catch (pdfErr) {
+    Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);
+  }
+
+  const subject = "Convocation & Confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
+  
+  let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
+    + "<div style='background-color: #0596DE; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0;'>Confirmation & Convocation de Formation</h2>"
+    + "</div>"
+    + "<div style='padding: 24px;'>"
+    + "<p>Bonjour,</p>"
+    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
+    + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
+    + "<b>Informations de connexion :</b><br>" + connexionInfo
+    + "</div>";
+
+  if (pdfUrl !== "") {
+    htmlBody += "<p><a href='" + pdfUrl + "' style='display:inline-block; background-color:#0596DE; color:white; padding:10px 18px; text-decoration:none; border-radius:5px;'>Télécharger votre Convocation PDF</a></p>";
+  }
+
+  htmlBody += "<p style='margin-top: 25px;'><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Demander une désinscription</a></p>"
+    + "</div>"
+    + "<div style='background-color: #f9f9f9; padding: 12px; text-align: center; font-size: 12px; color: #777;'>"
+    + "Numericoach &bull; Gestion des Formations Leroy Merlin"
+    + "</div></div>";
+
+  const mailOptions: GoogleAppsScript.Mail.MailAdvancedParameters = {
     to: email,
     subject: subject,
     htmlBody: htmlBody
-  });
+  };
+
+  if (pdfAttachment) {
+    mailOptions.attachments = [pdfAttachment];
+  }
+
+  MailApp.sendEmail(mailOptions);
+  Logger.log("Mail de convocation envoyé à " + email + " pour la session " + sessionId);
 }
 
 /**

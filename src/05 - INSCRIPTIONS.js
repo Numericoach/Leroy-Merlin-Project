@@ -1,7 +1,3 @@
-/**
- * Déclencheur sur soumission du formulaire d'inscription
- * Protégé par LockService contre les soumissions simultanées
- */
 function onSubmit(e) {
   if (!e || !e.range) return;
 
@@ -26,7 +22,6 @@ function onSubmit(e) {
       if (!match) return;
       var thisSessionid = match[1];
       
-      // 1. VÉRIFIER LES PLACES RESTANTES SOUS VERROU
       var sheetSessions = ss.getSheetByName("SESSIONS");
       var remainingSeats = 1;
       if (sheetSessions) {
@@ -47,7 +42,6 @@ function onSubmit(e) {
         return;
       }
 
-      // 2. VÉRIFIER SI DÉJÀ INSCRIT SOUS VERROU
       if (!sheetInscriptions) return;
       var maxRows = sheetInscriptions.getMaxRows();
       var verif = [];
@@ -61,20 +55,16 @@ function onSubmit(e) {
         return;
       }
 
-      // 3. INSCRIPTION DANS LE SHEETS
       inscription(thisTime, thisSessionid, thisEmail);
 
-      // 4. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
       addParticipantToCalendar(thisSessionid, thisEmail);
 
-      // 5. FONCTION SECONDAIRE : ENVOI DE L'E-MAIL DE CONFIRMATION (Découplé)
       try {
         sendConfirmationMail(thisSessionid, thisEmail);
       } catch (mailErr) {
         Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
       }
       
-      // 6. MISE À JOUR DYNAMIQUE DES CHOIX DU FORMULAIRE
       try {
         updateFormChoices();
       } catch (formErr) {
@@ -172,18 +162,77 @@ function sendConfirmationMail(sessionId, email) {
     "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
-  var subject = "Confirmation d'inscription à votre session de formation Leroy Merlin";
-  var htmlBody = "<h3>Bonjour,</h3>"
-    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été enregistrée.</p>"
-    + "<p>Une invitation Google Agenda vous a été envoyée avec le lien de connexion et le programme.</p>"
-    + "<p><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Cliquer ici pour vous désinscrire</a></p>"
-    + "<br><p>Cordialement,<br>L’équipe Numericoach</p>";
+  var connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "Lien Meet inclus dans votre invitation Agenda";
 
-  MailApp.sendEmail({
+  var pdfAttachment = null;
+  var pdfUrl = "";
+
+  try {
+    if (pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]) {
+      var modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue();
+      if (modeleConvocationId && modeleConvocationId.length > 10) {
+        var modeleConvocation = DriveApp.getFileById(modeleConvocationId);
+        var folderConvocationId = pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"] ? sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() : "";
+        var folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
+        
+        var convocationName = "Convocation_" + sessionId + "_" + email;
+        var convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
+        var doc = DocumentApp.openById(convocationDoc.getId());
+        var body = doc.getBody();
+
+        body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'))
+            .replaceText("{{SESSION ID}}", sessionId)
+            .replaceText("{{EMAIL}}", email);
+        doc.saveAndClose();
+
+        pdfAttachment = convocationDoc.getAs('application/pdf');
+        pdfAttachment.setName(convocationName + ".pdf");
+        var pdfFile = folderConvocation.createFile(pdfAttachment);
+        pdfUrl = pdfFile.getUrl();
+
+        try { convocationDoc.setTrashed(true); } catch (e) {}
+      }
+    }
+  } catch (pdfErr) {
+    Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);
+  }
+
+  var subject = "Convocation & Confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
+  
+  var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
+    + "<div style='background-color: #0596DE; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0;'>Confirmation & Convocation de Formation</h2>"
+    + "</div>"
+    + "<div style='padding: 24px;'>"
+    + "<p>Bonjour,</p>"
+    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
+    + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
+    + "<b>Informations de connexion :</b><br>" + connexionInfo
+    + "</div>";
+
+  if (pdfUrl !== "") {
+    htmlBody += "<p><a href='" + pdfUrl + "' style='display:inline-block; background-color:#0596DE; color:white; padding:10px 18px; text-decoration:none; border-radius:5px;'>Télécharger votre Convocation PDF</a></p>";
+  }
+
+  htmlBody += "<p style='margin-top: 25px;'><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Demander une désinscription</a></p>"
+    + "</div>"
+    + "<div style='background-color: #f9f9f9; padding: 12px; text-align: center; font-size: 12px; color: #777;'>"
+    + "Numericoach &bull; Gestion des Formations Leroy Merlin"
+    + "</div></div>";
+
+  var mailOptions = {
     to: email,
     subject: subject,
     htmlBody: htmlBody
-  });
+  };
+
+  if (pdfAttachment) {
+    mailOptions.attachments = [pdfAttachment];
+  }
+
+  MailApp.sendEmail(mailOptions);
+  Logger.log("Mail de convocation envoyé à " + email + " pour la session " + sessionId);
 }
 
 function getPreFilledFormUrl(formId, entryId, selectedValue) {
