@@ -142,6 +142,32 @@ function addParticipantToCalendar(sessionId: string, email: string): boolean {
 }
 
 /**
+ * Retirer un participant d'un événement Google Agenda lors d'une désinscription
+ */
+function removeParticipantFromCalendar(sessionId: string, email: string): boolean {
+  try {
+    const eventId = getOrCreateSessionEventId(sessionId);
+    if (!eventId) return false;
+
+    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+    if (!agendaId) return false;
+
+    const agenda = CalendarApp.getCalendarById(agendaId);
+    if (!agenda) return false;
+
+    const event = agenda.getEventById(eventId);
+    if (event) {
+      event.removeGuest(email);
+      Logger.log("Invité retiré avec succès de Google Agenda : " + email + " pour session " + sessionId);
+      return true;
+    }
+  } catch (err) {
+    Logger.log("Erreur lors du retrait de l'invité agenda : " + err);
+  }
+  return false;
+}
+
+/**
  * Parcourir les sessions pour créer les événements manquants
  */
 function createEventSession(): void {
@@ -200,7 +226,7 @@ function checkGuests(): void {
     }
   });
 
-  const sheetRecapGuests = ss.getSheetByName("RECAP REPONSES INVITATIONS");
+  const sheetRecapGuests = ss ? ss.getSheetByName("RECAP REPONSES INVITATIONS") : null;
   if (sheetRecapGuests) {
     const maxRows = sheetRecapGuests.getMaxRows();
     if (maxRows > 1) {
