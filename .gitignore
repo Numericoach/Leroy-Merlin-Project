@@ -1,4 +1,6 @@
 /node_modules
 *lock*
 .env
-.clasprc.json
+.clasprc.json
+src/*.js
+src/**/*.js
