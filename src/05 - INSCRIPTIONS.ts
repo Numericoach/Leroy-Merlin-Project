@@ -148,15 +148,24 @@ function onSubmit(e?: any): void {
 
     if (!sessionFound) {
       Logger.log("Avertissement : ID Session " + thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
-      remainingSeatsAfterForm = 0; // Si session non trouvée dans SESSIONS, autoriser par sécurité
+      remainingSeatsAfterForm = 0;
     }
 
-    // Comme Google Form insère la ligne D'ABORD dans INSCRIPTIONSS, la colonne M de SESSIONS contient déjà :
-    // (Places Restantes Avant) - (thisNbParticipants).
     // Si remainingSeatsAfterForm < 0, cela signifie que la demande dépasse la capacité disponible !
     if (remainingSeatsAfterForm < 0) {
       const availableBefore = remainingSeatsAfterForm + thisNbParticipants;
       Logger.log("Inscription refusée : dépassement de capacité (" + availableBefore + " disponibles avant, " + thisNbParticipants + " demandées) pour " + thisSessionid);
+      
+      // SUPPRIMER LA LIGNE EN TROP DE INSCRIPTIONSS POUR NE PAS POPULER LE TABLEAU EN CAS DE REFUS
+      if (e && e.range) {
+        try {
+          e.range.getSheet().deleteRow(e.range.getRow());
+          Logger.log("Ligne d'inscription refusée supprimée de " + e.range.getSheet().getName() + " à la ligne " + e.range.getRow());
+        } catch (delErr) {
+          Logger.log("Erreur lors de la suppression de la ligne refusée : " + delErr);
+        }
+      }
+
       try {
         sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom, Math.max(0, availableBefore), thisNbParticipants);
       } catch (waitErr) {
