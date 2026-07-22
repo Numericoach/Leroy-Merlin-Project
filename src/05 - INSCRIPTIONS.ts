@@ -226,7 +226,7 @@ function inscription(time: any, sessionId: string, email: string): void {
 }
 
 /**
- * Mettre à jour dynamiquement la liste déroulante des sessions disponibles dans le Google Form
+ * Mettre à jour dynamiquement la liste des sessions disponibles dans le Google Form (Liste déroulante ou Choix multiple)
  */
 function updateFormChoices(): void {
   const formId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
@@ -236,18 +236,22 @@ function updateFormChoices(): void {
   }
 
   const form = FormApp.openById(formId);
-  const items = form.getItems(FormApp.ItemType.LIST);
-  let sessionItem: GoogleAppsScript.Forms.ListItem | null = null;
+  const items = form.getItems();
+  let sessionListItem: GoogleAppsScript.Forms.ListItem | null = null;
+  let sessionRadioItem: GoogleAppsScript.Forms.MultipleChoiceItem | null = null;
 
   for (let i = 0; i < items.length; i++) {
     const title = items[i].getTitle();
-    if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
-      sessionItem = items[i].asListItem();
-      break;
+    if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Inscription a la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
+      if (items[i].getType() === FormApp.ItemType.LIST) {
+        sessionListItem = items[i].asListItem();
+      } else if (items[i].getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
+        sessionRadioItem = items[i].asMultipleChoiceItem();
+      }
     }
   }
 
-  if (!sessionItem) {
+  if (!sessionListItem && !sessionRadioItem) {
     Logger.log("Question de sélection de session non trouvée dans le formulaire.");
     return;
   }
@@ -262,23 +266,74 @@ function updateFormChoices(): void {
   const choices: string[] = [];
 
   values.forEach(function(row) {
-    const sessionId = row[0];
-    const publish = row[9];
-    const remaining = row[11];
-    const formationTitle = row[13];
+    const sessionId = row[0]; // Col B (ID SESSION)
+    const formationCol = row[1]; // Col C (FORMATION)
+    const dateVal = row[2]; // Col D (DATE)
+    const heureDebutVal = row[3]; // Col E (HEURE DEBUT)
+    const heureFinVal = row[4]; // Col F (HEURE FIN)
+    const infoComp = (row[8] || "").toString().trim(); // Col J (INFORMATION COMPLEMENTAIRE)
+    const publish = row[9]; // Col K (Publier)
+    const remaining = row[11]; // Col M (Places Restantes)
+    const moduleTitle = row[13] || formationCol || "Formation"; // Col O (MODULE TITRE)
 
     if (sessionId && publish && Number(remaining) > 0) {
-      const dateObj = new Date(row[2]);
-      const dateStr = dateObj.getDate() + "/" + (dateObj.getMonth() + 1) + "/" + dateObj.getFullYear();
-      choices.push(formationTitle + " - " + dateStr + " [" + sessionId + "]");
+      let dateStr = "";
+      if (dateVal) {
+        const dateObj = new Date(dateVal);
+        dateStr = (dateObj.getDate() < 10 ? "0" : "") + dateObj.getDate() + "/" + 
+                  (dateObj.getMonth() < 9 ? "0" : "") + (dateObj.getMonth() + 1) + "/" + 
+                  dateObj.getFullYear();
+      }
+
+      let heureDebutStr = "";
+      if (heureDebutVal) {
+        const hd = new Date(heureDebutVal);
+        heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() > 0 ? (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes() : "00");
+      }
+
+      let heureFinStr = "";
+      if (heureFinVal) {
+        const hf = new Date(heureFinVal);
+        heureFinStr = hf.getHours() + "h" + (hf.getMinutes() > 0 ? (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes() : "30");
+      }
+
+      // Formatage de l'information complémentaire (ex: Formation Gemini avec pratique -> (AVEC PRATIQUE))
+      let compClean = infoComp;
+      if (compClean.toLowerCase().indexOf("avec pratique") > -1) {
+        compClean = "(AVEC PRATIQUE)";
+      } else if (compClean.toLowerCase().indexOf("sans pratique") > -1) {
+        compClean = "(SANS PRATIQUE)";
+      } else if (compClean.length > 0) {
+        compClean = "(" + compClean + ")";
+      }
+
+      let titleClean = moduleTitle.toString().toUpperCase();
+      if (titleClean.indexOf("[") > -1) {
+        titleClean = titleClean.split("[")[0].trim();
+      }
+
+      let label = titleClean;
+      if (compClean) {
+        label += " " + compClean;
+      }
+      label += " - " + dateStr;
+      if (heureDebutStr && heureFinStr) {
+        label += " de " + heureDebutStr + " à " + heureFinStr;
+      }
+      label += " [" + sessionId + "]";
+
+      choices.push(label);
     }
   });
 
   if (choices.length > 0) {
-    sessionItem.setChoiceValues(choices);
+    if (sessionListItem) sessionListItem.setChoiceValues(choices);
+    if (sessionRadioItem) sessionRadioItem.setChoiceValues(choices);
     Logger.log("Formulaire mis à jour avec " + choices.length + " sessions disponibles.");
   } else {
-    sessionItem.setChoiceValues(["Aucune session disponible pour le moment"]);
+    const defaultMsg = ["Aucune session disponible pour le moment"];
+    if (sessionListItem) sessionListItem.setChoiceValues(defaultMsg);
+    if (sessionRadioItem) sessionRadioItem.setChoiceValues(defaultMsg);
     Logger.log("Aucune session disponible.");
   }
 }
