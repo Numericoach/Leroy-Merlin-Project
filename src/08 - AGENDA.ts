@@ -1,112 +1,163 @@
+/**
+  * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
+  */
+function getOrCreateSessionEventId(sessionId: string): string | null {
+  if (!sheetParametres || !sessionId) return null;
+
+  const lock = LockService.getScriptLock();
+  const hasLock = lock.tryLock(10000); // Attendre max 10 secondes pour acquérir le verrou
+
+  try {
+    const sheetSessionEvenements = ss.getSheetByName("SESSION AGENDA");
+    if (!sheetSessionEvenements) return null;
+
+    // 1. Vérifier si l'événement existe déjà dans le BDD Sheets
+    const sessionEvenementValues = sheetSessionEvenements.getDataRange().getValues();
+    for (let i = 0; i < sessionEvenementValues.length; i++) {
+      if (sessionEvenementValues[i][1] === sessionId) {
+        return sessionEvenementValues[i][2] as string; // eventId existant
+      }
+    }
+
+    // 2. Si pas trouvé, créer l'événement
+    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
+    const agenda = CalendarApp.getCalendarById(agendaId);
+    if (!agenda) {
+      Logger.log("Agenda introuvable ID: " + agendaId);
+      return null;
+    }
+
+    const sheetSessions = ss.getSheetByName("SESSIONS");
+    if (!sheetSessions) return null;
+    const lastRow = sheetSessions.getLastRow();
+    if (lastRow < 2) return null;
+
+    const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 5).getValues();
+    let targetSession: any[] | null = null;
+    for (let i = 0; i < sessionsValues.length; i++) {
+      if (sessionsValues[i][0] === sessionId) {
+        targetSession = sessionsValues[i];
+        break;
+      }
+    }
+
+    if (!targetSession) return null;
+
+    const sheetFormations = ss.getSheetByName("FORMATIONS");
+    let formationTitle = "Formation Leroy Merlin";
+    let formationDescription = "";
+    let formationCompetences = "";
+
+    if (sheetFormations) {
+      const match = targetSession[1].match(/\[(.*)\]/);
+      if (match) {
+        const formationId = match[1];
+        const formationsValues = sheetFormations.getDataRange().getValues();
+        for (let i = 0; i < formationsValues.length; i++) {
+          if (formationsValues[i][1] === formationId) {
+            formationTitle = formationsValues[i][2] || formationTitle;
+            formationDescription = formationsValues[i][4] || "";
+            formationCompetences = formationsValues[i][6] || "";
+            break;
+          }
+        }
+      }
+    }
+
+    const thisSessionDate = new Date(targetSession[2]);
+    const thisSessionHeureDebut = new Date(targetSession[3]);
+    const dateDebut = new Date(
+      thisSessionDate.getFullYear(),
+      thisSessionDate.getMonth(),
+      thisSessionDate.getDate(),
+      thisSessionHeureDebut.getHours(),
+      thisSessionHeureDebut.getMinutes(),
+      0
+    );
+
+    const thisSessionHeureFin = new Date(targetSession[4]);
+    const dateFin = new Date(
+      thisSessionDate.getFullYear(),
+      thisSessionDate.getMonth(),
+      thisSessionDate.getDate(),
+      thisSessionHeureFin.getHours(),
+      thisSessionHeureFin.getMinutes(),
+      0
+    );
+
+    const eventTitle = "Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const textAgenda = sheetParametres.getRange(pnParaCel["PARAMETRE_TEXTE_AGENDA"]).getValue() || "";
+    const connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "";
+
+    const description = textAgenda
+      + "<p></p><b>" + formationDescription + "</b><p></p>"
+      + connexionInfo
+      + "<p>Programme de la formation :</p>" + formationCompetences;
+
+    const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description });
+    newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
+
+    const newEventId = newEvent.getId();
+    sheetSessionEvenements.appendRow([new Date(), sessionId, newEventId]);
+    Logger.log("Nouvel événement créé pour la session : " + sessionId + " (ID: " + newEventId + ")");
+
+    return newEventId;
+  } catch (err) {
+    Logger.log("Erreur dans getOrCreateSessionEventId : " + err);
+    return null;
+  } finally {
+    if (hasLock) lock.releaseLock();
+  }
+}
+
+/**
+ * Ajouter un participant comme invité dans l'événement Google Agenda (Découplé et sécurisé)
+ */
+function addParticipantToCalendar(sessionId: string, email: string): boolean {
+  try {
+    const eventId = getOrCreateSessionEventId(sessionId);
+    if (!eventId || !sheetParametres) return false;
+
+    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
+    const agenda = CalendarApp.getCalendarById(agendaId);
+    if (!agenda) return false;
+
+    const event = agenda.getEventById(eventId);
+    if (event) {
+      event.addGuest(email);
+      Logger.log("Invité ajouté avec succès à Google Agenda : " + email + " pour session " + sessionId);
+      return true;
+    }
+  } catch (err) {
+    Logger.log("Erreur lors de l'ajout de l'invité à l’agenda : " + err);
+  }
+  return false;
+}
+
+/**
+ * Parcourir les sessions pour créer les événements manquants
+ */
 function createEventSession(): void {
   if (!sheetParametres) return;
 
-  const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
-  const agenda = CalendarApp.getCalendarById(agendaId);
-  if (!agenda) {
-    Logger.log("Agenda introuvable.");
-    return;
-  }
-
-  // FORMATIONS
-  const sheetFormations = ss.getSheetByName("FORMATIONS");
-  if (!sheetFormations) return;
-
-  const formationsValues = sheetFormations.getDataRange().getValues();
-  let formations: Record<string, any[]> = {};
-  formationsValues.forEach(function (formation) {
-    formations[formation[1]] = formation;
-  });
-
-  // SESSIONS AGENDA
-  const sheetSessionEvenements = ss.getSheetByName("SESSION AGENDA");
-  if (!sheetSessionEvenements) return;
-
-  const sessionEvenementValues = sheetSessionEvenements.getDataRange().getValues();
-  let sessionEvenement: Record<string, string> = {};
-  sessionEvenementValues.forEach(function (value) {
-    sessionEvenement[value[1]] = value[2];
-  });
-
-  // SESSIONS
   const sheetSessions = ss.getSheetByName("SESSIONS");
   if (!sheetSessions) return;
 
   const lastRow = sheetSessions.getLastRow();
   if (lastRow < 2) return;
 
-  const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 5).getValues();
-
-  sessionsValues.forEach(function (session) {
-    const thisSessionId = session[0];
-    if (thisSessionId !== "") {
-      Logger.log(session);
-      const thisSessionDate = new Date(session[2]);
-      const thisSessionHeureDebut = new Date(session[3]);
-      const thisSessionDateDebut = new Date(
-        thisSessionDate.getFullYear(),
-        thisSessionDate.getMonth(),
-        thisSessionDate.getDate(),
-        thisSessionHeureDebut.getHours(),
-        thisSessionHeureDebut.getMinutes(),
-        0
-      );
-
-      const thisSessionHeureFin = new Date(session[4]);
-      const thisSessionDateFin = new Date(
-        thisSessionDate.getFullYear(),
-        thisSessionDate.getMonth(),
-        thisSessionDate.getDate(),
-        thisSessionHeureFin.getHours(),
-        thisSessionHeureFin.getMinutes(),
-        0
-      );
-
-      const match = session[1].match(/\[(.*)\]/);
-      if (!match) return;
-      const thisFormationId = match[1];
-      if (!formations[thisFormationId]) return;
-
-      const thisFormationTitle = formations[thisFormationId][2];
-      const thisFormationDescription = formations[thisFormationId][4]; 
-      const thisFormationCompetences = formations[thisFormationId][6];
-
-      const thisEventTitle = "UCPA - Formation " + thisFormationTitle + " [" + thisSessionId + "]";
-
-      const thisTextAgenda = sheetParametres.getRange(pnParaCel["PARAMETRE_TEXTE_AGENDA"]).getValue();
-
-      const thisDescription = thisTextAgenda
-        + "<p></p>"
-        + "<b>" + thisFormationDescription + "</b>"
-        + "<p></p>"
-        + sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue()
-        + "<p>Voici le programme de la formation du jour :</p>"
-        + thisFormationCompetences
-        + "<p></p>"
-        + "<p>-----------</p>"
-        + "Pour vous désinscrire utilisez exclusivement le lien que vous avez reçu dans le mail d'inscription.";
-
-      const thisEventId = sessionEvenement[thisSessionId];
-
-      if (thisEventId === undefined) {
-        // CREATION
-        Logger.log("Création événement");
-        const newEvent = agenda.createEvent(thisEventTitle, thisSessionDateDebut, thisSessionDateFin, {
-          description: thisDescription
-        });
-        newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
-
-        const newEventId = newEvent.getId();
-
-        // AJOUT DANS LA BDD
-        sheetSessionEvenements.appendRow([new Date(), thisSessionId, newEventId]);
-        Logger.log("Event créé : " + thisSessionId);
-      }
+  const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 1).getValues();
+  sessionsValues.forEach(function (row) {
+    const sessionId = row[0];
+    if (sessionId && sessionId !== "") {
+      getOrCreateSessionEventId(sessionId);
     }
   });
 }
 
-// VERIFIER LES STATUTS DES INVITES
+/**
+ * Vérifier les statuts des invités Google Agenda
+ */
 function checkGuests(): void {
   const sheetSessions = ss.getSheetByName("SESSIONS");
   if (!sheetSessions || !sheetParametres) return;
@@ -115,9 +166,7 @@ function checkGuests(): void {
   if (lastRow < 2) return;
 
   const eventIdsValues = sheetSessions.getRange(2, 25, lastRow - 1, 1).getValues();
-  const eventIds = eventIdsValues.map(function (r) {
-    return r[0];
-  });
+  const eventIds = eventIdsValues.map(r => r[0]);
 
   let datas: any[][] = [];
 

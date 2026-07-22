@@ -1,16 +1,10 @@
-/* NUM IEN - INSCRIPTION EN LIGNE - code soumis aux droits d'auteurs - @2020 - 2026
-
-tous droits de distribution et de commercialisation reservés à l'auteur propriétaire du code : NUMERICOACH 
-contact@numericoach.com
-
-*/
+/* NUMERICOACH - INSCRIPTIONS LEROY MERLIN - @2026 */
 
 const ss: GoogleAppsScript.Spreadsheet.Spreadsheet = SpreadsheetApp.getActiveSpreadsheet(); 
 const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss.getSheetByName("PARAMETRES");
-const sheetInscription: GoogleAppsScript.Spreadsheet.Sheet | null = ss.getSheetByName("INSCRIPTIONSS"); 
 const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss.getSheetByName("INSCRIPTIONS"); 
 
-// plages nommées 
+// Plages nommées des paramètres
 const plagesNommeesParametres: GoogleAppsScript.Spreadsheet.NamedRange[] = sheetParametres ? sheetParametres.getNamedRanges() : []; 
 const pnParaCel: Record<string, string> = {}; 
 const celParaPn: Record<string, string> = {}; 
@@ -31,7 +25,8 @@ const pnParaKeys: string[] = Object.keys(pnParaCel);
 function onOpen(): void {
   const ui = SpreadsheetApp.getUi(); 
   ui.createMenu("NUMERICOACH")
-    .addItem("Réparer les PDF manquants", "reparePdf")
+    .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
+    .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
     .addToUi(); 
 }
 
@@ -71,6 +66,7 @@ function onEdit(e?: GoogleAppsScript.Events.SheetsOnEdit): void {
     const sheetName = e.range.getSheet().getName();
     if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
       Logger.log("Modification détectée dans : " + sheetName);
+      updateFormChoices();
     }
   } catch (err) {
     Logger.log("Erreur dans onEdit : " + err);
