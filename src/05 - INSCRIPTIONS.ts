@@ -17,7 +17,7 @@ function onSubmit(e?: any): void {
     let thisCivilite = "";
     let thisPrenom = "";
     let thisNom = "";
-    let thisNbParticipants = 1;
+    const thisNbParticipants = 1; // 1 Inscription = 1 Entreprise
     let thisSheetName = "";
 
     if (e && e.range) {
@@ -47,12 +47,7 @@ function onSubmit(e?: any): void {
           thisEmail = val;
         }
         
-        if (keyLower.indexOf("participant") > -1 || keyLower.indexOf("nombre") > -1 || keyLower.indexOf("nb") > -1) {
-          const parsed = parseInt(val, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            thisNbParticipants = parsed;
-          }
-        } else if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || keyLower.indexOf("inscription à la formation") > -1 || keyLower.indexOf("session") > -1) {
+        if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || keyLower.indexOf("inscription à la formation") > -1 || keyLower.indexOf("session") > -1) {
           if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || !thisSession) {
             thisSession = val;
           }
@@ -138,7 +133,7 @@ function onSubmit(e?: any): void {
         for (let i = 0; i < sessionsData.length; i++) {
           const idInSheet = (sessionsData[i][0] || "").toString().trim();
           if (idInSheet === thisSessionid) {
-            remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes déjà calculées avec la soumission actuelle)
+            remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
             sessionFound = true;
             break;
           }
@@ -151,12 +146,11 @@ function onSubmit(e?: any): void {
       remainingSeatsAfterForm = 0;
     }
 
-    // Si remainingSeatsAfterForm < 0, cela signifie que la demande dépasse la capacité disponible !
+    // Si remainingSeatsAfterForm < 0, cela signifie que la session est déjà complète !
     if (remainingSeatsAfterForm < 0) {
-      const availableBefore = remainingSeatsAfterForm + thisNbParticipants;
-      Logger.log("Inscription refusée : dépassement de capacité (" + availableBefore + " disponibles avant, " + thisNbParticipants + " demandées) pour " + thisSessionid);
+      Logger.log("Inscription refusée : session complète pour " + thisSessionid);
       
-      // SUPPRIMER LA LIGNE EN TROP DE INSCRIPTIONSS POUR NE PAS POPULER LE TABLEAU EN CAS DE REFUS
+      // SUPPRIMER LA LIGNE EN TROP DE INSCRIPTIONSS POUR CONSERVER UN COMPTEUR PROPRE
       if (e && e.range) {
         try {
           e.range.getSheet().deleteRow(e.range.getRow());
@@ -167,7 +161,7 @@ function onSubmit(e?: any): void {
       }
 
       try {
-        sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom, Math.max(0, availableBefore), thisNbParticipants);
+        sendWaitingListMail(thisSessionid, thisEmail, thisPrenom, thisNom);
       } catch (waitErr) {
         Logger.log("Erreur lors de l'envoi de l'e-mail de liste d'attente : " + waitErr);
       }
@@ -196,7 +190,7 @@ function onSubmit(e?: any): void {
 
     // 6. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
     try {
-      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite, thisNbParticipants);
+      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite);
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
     }
@@ -363,9 +357,9 @@ function updateFormChoices(): void {
 }
 
 /**
- * Envoi d'un e-mail d'information et d'inscription sur Liste d'Attente lorsque la session est complète ou insuffisante
+ * Envoi d'un e-mail d'information et d'inscription sur Liste d'Attente lorsque la session est complète
  */
-function sendWaitingListMail(sessionId: string, email: string, prenom?: string, nom?: string, remainingSeats?: number, requestedSeats?: number): void {
+function sendWaitingListMail(sessionId: string, email: string, prenom?: string, nom?: string): void {
   const formListeAttenteId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
@@ -393,8 +387,8 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Nous avons bien reçu votre demande d'inscription pour <b>" + (requestedSeats || 1) + " participant(s)</b> à la session <b>[" + sessionId + "]</b>.</p>"
-    + "<p style='color: #C0392B;'><b>Information importante :</b> Cette session ne dispose plus de places suffisantes (" + (remainingSeats && remainingSeats > 0 ? remainingSeats + " place(s) restante(s)" : "session complète") + ").</p>"
+    + "<p>Nous avons bien reçu votre demande d'inscription à la session <b>[" + sessionId + "]</b>.</p>"
+    + "<p style='color: #C0392B;'><b>Information importante :</b> Cette session est actuellement complète.</p>"
     + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>liste d'attente</b> :</p>";
 
   if (formListeAttenteId) {
@@ -430,7 +424,7 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
 /**
  * Envoi de l'e-mail de convocation / confirmation personnalisé avec le PDF complet
  */
-function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants?: number): void {
+function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string): void {
   const urlDesinscription = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
@@ -500,8 +494,6 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
       const doc = DocumentApp.openById(convocationDoc.getId());
       const body = doc.getBody();
 
-      const nbPartStr = (nbParticipants || 1).toString();
-
       body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
       body.replaceText("{{SESSION ID}}", sessionId);
       body.replaceText("{{EMAIL}}", email);
@@ -516,8 +508,8 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
       body.replaceText("{{CONNEXION}}", connexionInfo);
       body.replaceText("{{DESCRIPTION}}", descriptionStr);
       body.replaceText("{{APPLI}}", formationTitle);
-      body.replaceText("{{NB PARTICIPANTS}}", nbPartStr);
-      body.replaceText("{{PARTICIPANTS}}", nbPartStr);
+      body.replaceText("{{NB PARTICIPANTS}}", "1");
+      body.replaceText("{{PARTICIPANTS}}", "1");
 
       doc.saveAndClose();
 
@@ -540,7 +532,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p>Votre inscription à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
