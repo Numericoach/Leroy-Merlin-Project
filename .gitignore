@@ -1,6 +1,5 @@
 /node_modules
+/dist
 *lock*
 .env
 .clasprc.json
-src/*.js
-src/**/*.js
