@@ -7,21 +7,46 @@ function setupTriggers(): void {
   
   // 1. Nettoyer les anciens déclencheurs existants pour éviter les doublons
   allTriggers.forEach(function (trigger) {
-    if (trigger.getHandlerFunction() === "onSubmit" || trigger.getHandlerFunction() === "onEdit") {
+    const handler = trigger.getHandlerFunction();
+    if (handler === "onSubmit" || handler === "onEditTrigger" || handler === "onEdit") {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  // 2. Créer le déclencheurs installable sur soumission de formulaire (onFormSubmit)
+  // 2. Créer le déclencheur installable sur soumission de formulaire (onFormSubmit)
   ScriptApp.newTrigger("onSubmit")
     .forSpreadsheet(ss)
     .onFormSubmit()
     .create();
 
-  Logger.log("Déclencheur 'onSubmit' (onFormSubmit) installé avec succès !");
+  // 3. Créer le déclencheur installable sur modification du Sheets (onEdit)
+  ScriptApp.newTrigger("onEditTrigger")
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  Logger.log("Déclencheurs 'onSubmit' et 'onEditTrigger' installés avec succès !");
   
-  const ui = SpreadsheetApp.getUi();
-  if (ui) {
-    ui.alert("Installation réussie", "Le déclencheur automatique d'inscription a été correctement configuré.", ui.ButtonSet.OK);
+  try {
+    const ui = SpreadsheetApp.getUi();
+    if (ui) {
+      ui.alert("Installation réussie", "Les déclencheurs automatiques d'inscription et de mise à jour des sessions ont été correctement configurés.", ui.ButtonSet.OK);
+    }
+  } catch (e) {}
+}
+
+/**
+ * Fonction déclenchée lors d'une modification manuelle dans la feuille de calcul
+ */
+function onEditTrigger(e?: any): void {
+  if (!e || !e.range) return;
+  try {
+    const sheetName = e.range.getSheet().getName();
+    if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
+      Logger.log("Modification détectée dans : " + sheetName + " (Mise à jour du Formulaire...)");
+      updateFormChoices();
+    }
+  } catch (err) {
+    Logger.log("Erreur dans onEditTrigger : " + err);
   }
 }
