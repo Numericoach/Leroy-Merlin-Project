@@ -37,17 +37,27 @@ function onSubmit(e?: any): void {
       thisTime = new Date();
     }
 
-    // 1. EXTRACTION INTELLIGENTE DES DONNÉES DE LA SOUMISSION
+    // 1. EXTRACTION INTELLIGENTE ET RIGOUREUSE DES DONNÉES DE LA SOUMISSION
     if (e && e.namedValues) {
       for (const key in e.namedValues) {
         const keyLower = key.toLowerCase();
         const val = (e.namedValues[key][0] || "").toString().trim();
+        
         if (!thisEmail && (keyLower.indexOf("mail") > -1 || keyLower.indexOf("courriel") > -1 || keyLower.indexOf("email") > -1)) {
           thisEmail = val;
         }
-        if (!thisSession && (keyLower.indexOf("session") > -1 || keyLower.indexOf("formation") > -1)) {
-          thisSession = val;
+        
+        if (keyLower.indexOf("participant") > -1 || keyLower.indexOf("nombre") > -1 || keyLower.indexOf("nb") > -1) {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            thisNbParticipants = parsed;
+          }
+        } else if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || keyLower.indexOf("inscription à la formation") > -1 || keyLower.indexOf("session") > -1) {
+          if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || !thisSession) {
+            thisSession = val;
+          }
         }
+
         if (!thisCivilite && keyLower.indexOf("civilite") > -1) {
           thisCivilite = val;
         }
@@ -56,12 +66,6 @@ function onSubmit(e?: any): void {
         }
         if (!thisNom && keyLower.indexOf("nom") > -1 && keyLower.indexOf("prenom") === -1) {
           thisNom = val;
-        }
-        if (keyLower.indexOf("participant") > -1 || keyLower.indexOf("nombre") > -1 || keyLower.indexOf("nb") > -1) {
-          const parsed = parseInt(val, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            thisNbParticipants = parsed;
-          }
         }
       }
     }
@@ -77,7 +81,7 @@ function onSubmit(e?: any): void {
         if (!thisEmail && valStr.indexOf("@") > -1) {
           thisEmail = valStr;
         }
-        if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+        if (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1) {
           thisSession = valStr;
         }
       });
@@ -96,7 +100,7 @@ function onSubmit(e?: any): void {
           if (!thisEmail && valStr.indexOf("@") > -1) {
             thisEmail = valStr;
           }
-          if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+          if (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1) {
             thisSession = valStr;
           }
         });
@@ -108,27 +112,43 @@ function onSubmit(e?: any): void {
       return;
     }
 
-    // EXTRACTION SÉCURISÉE DE L'ID DE SESSION
-    let thisSessionid = thisSession;
-    const match = thisSession.match(/\[(.*?)\]/);
-    if (match && match[1]) {
-      thisSessionid = match[1].trim();
+    // EXTRACTION PRÉCISE DE L'ID DE SESSION (ex: SES-0002)
+    let thisSessionid = "";
+    const matchBracket = thisSession.match(/\[(.*?)\]/);
+    if (matchBracket && matchBracket[1]) {
+      thisSessionid = matchBracket[1].trim();
+    } else {
+      const matchSes = thisSession.match(/(SES-\d+)/i);
+      if (matchSes && matchSes[1]) {
+        thisSessionid = matchSes[1].trim();
+      } else {
+        thisSessionid = thisSession.trim();
+      }
     }
 
-    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU AVEC LE NOMBRE DE PARTICIPANTS
+    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU DANS L'ONGLET SESSIONS
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
-    let remainingSeats = 1;
+    let remainingSeats = 0;
+    let sessionFound = false;
+
     if (sheetSessions) {
       const lastRowSessions = sheetSessions.getLastRow();
       if (lastRowSessions >= 2) {
         const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
         for (let i = 0; i < sessionsData.length; i++) {
-          if (sessionsData[i][0] === thisSessionid) {
-            remainingSeats = Number(sessionsData[i][11]);
+          const idInSheet = (sessionsData[i][0] || "").toString().trim();
+          if (idInSheet === thisSessionid) {
+            remainingSeats = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
+            sessionFound = true;
             break;
           }
         }
       }
+    }
+
+    if (!sessionFound) {
+      Logger.log("Avertissement : ID Session " + thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
+      remainingSeats = 999; // Si session non trouvée dans SESSIONS, autoriser par sécurité
     }
 
     if (remainingSeats < thisNbParticipants) {
