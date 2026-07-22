@@ -226,115 +226,145 @@ function inscription(time: any, sessionId: string, email: string): void {
 }
 
 /**
+ * Helper pour extraire l'ID propre d'un formulaire Google Forms même si l'utilisateur a collé l'URL entière
+ */
+function extractFormId(input: string): string {
+  if (!input) return "";
+  const cleaned = input.trim();
+  const match = cleaned.match(/\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return cleaned;
+}
+
+/**
  * Mettre à jour dynamiquement la liste des sessions disponibles dans le Google Form (Liste déroulante ou Choix multiple)
  */
 function updateFormChoices(): void {
-  const formId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
-  if (!formId) {
-    Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
-    return;
-  }
+  try {
+    const rawFormId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
+    const formId = extractFormId(rawFormId);
+    if (!formId) {
+      Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
+      return;
+    }
 
-  const form = FormApp.openById(formId);
-  const items = form.getItems();
-  let sessionListItem: GoogleAppsScript.Forms.ListItem | null = null;
-  let sessionRadioItem: GoogleAppsScript.Forms.MultipleChoiceItem | null = null;
+    let form: GoogleAppsScript.Forms.Form;
+    try {
+      form = FormApp.openById(formId);
+    } catch (openErr) {
+      Logger.log("Erreur lors de l'ouverture du formulaire ID '" + formId + "' : " + openErr);
+      try {
+        const ui = SpreadsheetApp.getUi();
+        if (ui) {
+          ui.alert("Formulaire introuvable", "Impossible d'ouvrir le Google Form avec l'ID renseigné dans PARAMETRES (" + formId + "). Vérifiez que l'ID est bien l'ID d'édition du formulaire.", ui.ButtonSet.OK);
+        }
+      } catch (e) {}
+      return;
+    }
 
-  for (let i = 0; i < items.length; i++) {
-    const title = items[i].getTitle();
-    if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Inscription a la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
-      if (items[i].getType() === FormApp.ItemType.LIST) {
-        sessionListItem = items[i].asListItem();
-      } else if (items[i].getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-        sessionRadioItem = items[i].asMultipleChoiceItem();
+    const items = form.getItems();
+    let sessionListItem: GoogleAppsScript.Forms.ListItem | null = null;
+    let sessionRadioItem: GoogleAppsScript.Forms.MultipleChoiceItem | null = null;
+
+    for (let i = 0; i < items.length; i++) {
+      const title = items[i].getTitle();
+      if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Inscription a la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
+        if (items[i].getType() === FormApp.ItemType.LIST) {
+          sessionListItem = items[i].asListItem();
+        } else if (items[i].getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
+          sessionRadioItem = items[i].asMultipleChoiceItem();
+        }
       }
     }
-  }
 
-  if (!sessionListItem && !sessionRadioItem) {
-    Logger.log("Question de sélection de session non trouvée dans le formulaire.");
-    return;
-  }
-
-  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
-  if (!sheetSessions) return;
-
-  const lastRow = sheetSessions.getLastRow();
-  if (lastRow < 2) return;
-
-  const values = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
-  const choices: string[] = [];
-
-  values.forEach(function(row) {
-    const sessionId = row[0]; // Col B (ID SESSION)
-    const formationCol = row[1]; // Col C (FORMATION)
-    const dateVal = row[2]; // Col D (DATE)
-    const heureDebutVal = row[3]; // Col E (HEURE DEBUT)
-    const heureFinVal = row[4]; // Col F (HEURE FIN)
-    const infoComp = (row[8] || "").toString().trim(); // Col J (INFORMATION COMPLEMENTAIRE)
-    const publish = row[9]; // Col K (Publier)
-    const remaining = row[11]; // Col M (Places Restantes)
-    const moduleTitle = row[13] || formationCol || "Formation"; // Col O (MODULE TITRE)
-
-    if (sessionId && publish && Number(remaining) > 0) {
-      let dateStr = "";
-      if (dateVal) {
-        const dateObj = new Date(dateVal);
-        dateStr = (dateObj.getDate() < 10 ? "0" : "") + dateObj.getDate() + "/" + 
-                  (dateObj.getMonth() < 9 ? "0" : "") + (dateObj.getMonth() + 1) + "/" + 
-                  dateObj.getFullYear();
-      }
-
-      let heureDebutStr = "";
-      if (heureDebutVal) {
-        const hd = new Date(heureDebutVal);
-        heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() > 0 ? (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes() : "00");
-      }
-
-      let heureFinStr = "";
-      if (heureFinVal) {
-        const hf = new Date(heureFinVal);
-        heureFinStr = hf.getHours() + "h" + (hf.getMinutes() > 0 ? (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes() : "30");
-      }
-
-      // Formatage de l'information complémentaire (ex: Formation Gemini avec pratique -> (AVEC PRATIQUE))
-      let compClean = infoComp;
-      if (compClean.toLowerCase().indexOf("avec pratique") > -1) {
-        compClean = "(AVEC PRATIQUE)";
-      } else if (compClean.toLowerCase().indexOf("sans pratique") > -1) {
-        compClean = "(SANS PRATIQUE)";
-      } else if (compClean.length > 0) {
-        compClean = "(" + compClean + ")";
-      }
-
-      let titleClean = moduleTitle.toString().toUpperCase();
-      if (titleClean.indexOf("[") > -1) {
-        titleClean = titleClean.split("[")[0].trim();
-      }
-
-      let label = titleClean;
-      if (compClean) {
-        label += " " + compClean;
-      }
-      label += " - " + dateStr;
-      if (heureDebutStr && heureFinStr) {
-        label += " de " + heureDebutStr + " à " + heureFinStr;
-      }
-      label += " [" + sessionId + "]";
-
-      choices.push(label);
+    if (!sessionListItem && !sessionRadioItem) {
+      Logger.log("Question de sélection de session non trouvée dans le formulaire.");
+      return;
     }
-  });
 
-  if (choices.length > 0) {
-    if (sessionListItem) sessionListItem.setChoiceValues(choices);
-    if (sessionRadioItem) sessionRadioItem.setChoiceValues(choices);
-    Logger.log("Formulaire mis à jour avec " + choices.length + " sessions disponibles.");
-  } else {
-    const defaultMsg = ["Aucune session disponible pour le moment"];
-    if (sessionListItem) sessionListItem.setChoiceValues(defaultMsg);
-    if (sessionRadioItem) sessionRadioItem.setChoiceValues(defaultMsg);
-    Logger.log("Aucune session disponible.");
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    if (!sheetSessions) return;
+
+    const lastRow = sheetSessions.getLastRow();
+    if (lastRow < 2) return;
+
+    const values = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+    const choices: string[] = [];
+
+    values.forEach(function(row) {
+      const sessionId = row[0]; // Col B (ID SESSION)
+      const formationCol = row[1]; // Col C (FORMATION)
+      const dateVal = row[2]; // Col D (DATE)
+      const heureDebutVal = row[3]; // Col E (HEURE DEBUT)
+      const heureFinVal = row[4]; // Col F (HEURE FIN)
+      const infoComp = (row[8] || "").toString().trim(); // Col J (INFORMATION COMPLEMENTAIRE)
+      const publish = row[9]; // Col K (Publier)
+      const remaining = row[11]; // Col M (Places Restantes)
+      const moduleTitle = row[13] || formationCol || "Formation"; // Col O (MODULE TITRE)
+
+      if (sessionId && publish && Number(remaining) > 0) {
+        let dateStr = "";
+        if (dateVal) {
+          const dateObj = new Date(dateVal);
+          dateStr = (dateObj.getDate() < 10 ? "0" : "") + dateObj.getDate() + "/" + 
+                    (dateObj.getMonth() < 9 ? "0" : "") + (dateObj.getMonth() + 1) + "/" + 
+                    dateObj.getFullYear();
+        }
+
+        let heureDebutStr = "";
+        if (heureDebutVal) {
+          const hd = new Date(heureDebutVal);
+          heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() > 0 ? (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes() : "00");
+        }
+
+        let heureFinStr = "";
+        if (heureFinVal) {
+          const hf = new Date(heureFinVal);
+          heureFinStr = hf.getHours() + "h" + (hf.getMinutes() > 0 ? (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes() : "30");
+        }
+
+        let compClean = infoComp;
+        if (compClean.toLowerCase().indexOf("avec pratique") > -1) {
+          compClean = "(AVEC PRATIQUE)";
+        } else if (compClean.toLowerCase().indexOf("sans pratique") > -1) {
+          compClean = "(SANS PRATIQUE)";
+        } else if (compClean.length > 0) {
+          compClean = "(" + compClean + ")";
+        }
+
+        let titleClean = moduleTitle.toString().toUpperCase();
+        if (titleClean.indexOf("[") > -1) {
+          titleClean = titleClean.split("[")[0].trim();
+        }
+
+        let label = titleClean;
+        if (compClean) {
+          label += " " + compClean;
+        }
+        label += " - " + dateStr;
+        if (heureDebutStr && heureFinStr) {
+          label += " de " + heureDebutStr + " à " + heureFinStr;
+        }
+        label += " [" + sessionId + "]";
+
+        choices.push(label);
+      }
+    });
+
+    if (choices.length > 0) {
+      if (sessionListItem) sessionListItem.setChoiceValues(choices);
+      if (sessionRadioItem) sessionRadioItem.setChoiceValues(choices);
+      Logger.log("Formulaire mis à jour avec " + choices.length + " sessions disponibles.");
+    } else {
+      const defaultMsg = ["Aucune session disponible pour le moment"];
+      if (sessionListItem) sessionListItem.setChoiceValues(defaultMsg);
+      if (sessionRadioItem) sessionRadioItem.setChoiceValues(defaultMsg);
+      Logger.log("Aucune session disponible.");
+    }
+  } catch (err) {
+    Logger.log("Erreur dans updateFormChoices : " + err);
   }
 }
 
