@@ -17,6 +17,7 @@ function onSubmit(e?: any): void {
     let thisCivilite = "";
     let thisPrenom = "";
     let thisNom = "";
+    let thisNbParticipants = 1;
     let thisSheetName = "";
 
     if (e && e.range) {
@@ -55,6 +56,12 @@ function onSubmit(e?: any): void {
         }
         if (!thisNom && keyLower.indexOf("nom") > -1 && keyLower.indexOf("prenom") === -1) {
           thisNom = val;
+        }
+        if (keyLower.indexOf("participant") > -1 || keyLower.indexOf("nombre") > -1 || keyLower.indexOf("nb") > -1) {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            thisNbParticipants = parsed;
+          }
         }
       }
     }
@@ -108,7 +115,7 @@ function onSubmit(e?: any): void {
       thisSessionid = match[1].trim();
     }
 
-    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU
+    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU AVEC LE NOMBRE DE PARTICIPANTS
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     let remainingSeats = 1;
     if (sheetSessions) {
@@ -124,8 +131,8 @@ function onSubmit(e?: any): void {
       }
     }
 
-    if (remainingSeats <= 0) {
-      Logger.log("Inscription refusée : plus de places disponibles pour " + thisSessionid);
+    if (remainingSeats < thisNbParticipants) {
+      Logger.log("Inscription refusée : pas assez de places disponibles (" + remainingSeats + " restantes, " + thisNbParticipants + " demandées) pour " + thisSessionid);
       return;
     }
 
@@ -151,7 +158,7 @@ function onSubmit(e?: any): void {
 
     // 6. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
     try {
-      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite);
+      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite, thisNbParticipants);
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
     }
@@ -241,7 +248,7 @@ function updateFormChoices(): void {
 /**
  * Envoi de l'e-mail de convocation / confirmation personnalisé avec le PDF complet
  */
-function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string): void {
+function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants?: number): void {
   const urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
   
   let entrySessionId = "entry.2116080188";
@@ -309,6 +316,8 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
       const doc = DocumentApp.openById(convocationDoc.getId());
       const body = doc.getBody();
 
+      const nbPartStr = (nbParticipants || 1).toString();
+
       body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
       body.replaceText("{{SESSION ID}}", sessionId);
       body.replaceText("{{EMAIL}}", email);
@@ -323,6 +332,8 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
       body.replaceText("{{CONNEXION}}", connexionInfo);
       body.replaceText("{{DESCRIPTION}}", descriptionStr);
       body.replaceText("{{APPLI}}", formationTitle);
+      body.replaceText("{{NB PARTICIPANTS}}", nbPartStr);
+      body.replaceText("{{PARTICIPANTS}}", nbPartStr);
 
       doc.saveAndClose();
 
@@ -345,7 +356,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Votre inscription à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
