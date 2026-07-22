@@ -10,6 +10,9 @@ function onSubmit(e) {
     var thisTime = new Date();
     var thisEmail = "";
     var thisSession = "";
+    var thisCivilite = "";
+    var thisPrenom = "";
+    var thisNom = "";
     var thisSheetName = "";
 
     if (e && e.range) {
@@ -21,17 +24,32 @@ function onSubmit(e) {
     if (e && e.namedValues) {
       for (var key in e.namedValues) {
         var keyLower = key.toLowerCase();
+        var val = (e.namedValues[key][0] || "").toString().trim();
         if (!thisEmail && (keyLower.indexOf("mail") > -1 || keyLower.indexOf("courriel") > -1 || keyLower.indexOf("email") > -1)) {
-          thisEmail = (e.namedValues[key][0] || "").toString().trim();
+          thisEmail = val;
         }
         if (!thisSession && (keyLower.indexOf("session") > -1 || keyLower.indexOf("formation") > -1)) {
-          thisSession = (e.namedValues[key][0] || "").toString().trim();
+          thisSession = val;
+        }
+        if (!thisCivilite && keyLower.indexOf("civilite") > -1) {
+          thisCivilite = val;
+        }
+        if (!thisPrenom && keyLower.indexOf("prenom") > -1) {
+          thisPrenom = val;
+        }
+        if (!thisNom && keyLower.indexOf("nom") > -1 && keyLower.indexOf("prenom") === -1) {
+          thisNom = val;
         }
       }
     }
 
     if (e && e.values && Array.isArray(e.values)) {
       if (!thisTime) thisTime = e.values[0];
+      if (!thisEmail && e.values[1] && e.values[1].indexOf("@") > -1) thisEmail = e.values[1];
+      if (!thisCivilite && e.values[2]) thisCivilite = e.values[2];
+      if (!thisPrenom && e.values[3]) thisPrenom = e.values[3];
+      if (!thisNom && e.values[4]) thisNom = e.values[4];
+
       e.values.forEach(function(val) {
         var valStr = (val || "").toString().trim();
         if (!thisEmail && valStr.indexOf("@") > -1) {
@@ -47,6 +65,11 @@ function onSubmit(e) {
       var rowValues = e.range.getValues()[0];
       if (rowValues && rowValues.length > 0) {
         if (!thisTime) thisTime = rowValues[0];
+        if (!thisEmail && rowValues[1] && rowValues[1].toString().indexOf("@") > -1) thisEmail = rowValues[1].toString().trim();
+        if (!thisCivilite && rowValues[2]) thisCivilite = rowValues[2].toString().trim();
+        if (!thisPrenom && rowValues[3]) thisPrenom = rowValues[3].toString().trim();
+        if (!thisNom && rowValues[4]) thisNom = rowValues[4].toString().trim();
+
         rowValues.forEach(function(val) {
           var valStr = (val || "").toString().trim();
           if (!thisEmail && valStr.indexOf("@") > -1) {
@@ -70,7 +93,7 @@ function onSubmit(e) {
       thisSessionid = match[1].trim();
     }
 
-    var sheetSessions = ss.getSheetByName("SESSIONS");
+    var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     var remainingSeats = 1;
     if (sheetSessions) {
       var lastRowSessions = sheetSessions.getLastRow();
@@ -108,7 +131,7 @@ function onSubmit(e) {
     addParticipantToCalendar(thisSessionid, thisEmail);
 
     try {
-      sendConfirmationMail(thisSessionid, thisEmail);
+      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite);
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
     }
@@ -157,7 +180,7 @@ function updateFormChoices() {
     return;
   }
 
-  var sheetSessions = ss.getSheetByName("SESSIONS");
+  var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
   if (!sheetSessions) return;
 
   var lastRow = sheetSessions.getLastRow();
@@ -188,7 +211,7 @@ function updateFormChoices() {
   }
 }
 
-function sendConfirmationMail(sessionId, email) {
+function sendConfirmationMail(sessionId, email, prenom, nom, civilite) {
   var urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
   
   var entrySessionId = "entry.2116080188";
@@ -204,6 +227,40 @@ function sendConfirmationMail(sessionId, email) {
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
   var connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "Lien Meet inclus dans votre invitation Agenda";
+
+  var formationTitle = "Formation Leroy Merlin";
+  var dateStr = "";
+  var heureDebutStr = "";
+  var heureFinStr = "";
+  var lieuStr = "";
+  var descriptionStr = "";
+
+  var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+  if (sheetSessions) {
+    var lastRow = sheetSessions.getLastRow();
+    if (lastRow >= 2) {
+      var sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+      for (var i = 0; i < sessionsValues.length; i++) {
+        if (sessionsValues[i][0] === sessionId) {
+          formationTitle = sessionsValues[i][13] || formationTitle;
+          if (sessionsValues[i][2]) {
+            var d = new Date(sessionsValues[i][2]);
+            dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+          }
+          if (sessionsValues[i][3]) {
+            var hd = new Date(sessionsValues[i][3]);
+            heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
+          }
+          if (sessionsValues[i][4]) {
+            var hf = new Date(sessionsValues[i][4]);
+            heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
+          }
+          lieuStr = sessionsValues[i][7] || "";
+          break;
+        }
+      }
+    }
+  }
 
   var pdfAttachment = null;
   var pdfUrl = "";
@@ -223,6 +280,18 @@ function sendConfirmationMail(sessionId, email) {
       body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
       body.replaceText("{{SESSION ID}}", sessionId);
       body.replaceText("{{EMAIL}}", email);
+      body.replaceText("{{CIVILITE}}", civilite || "");
+      body.replaceText("{{PRENOM}}", prenom || "");
+      body.replaceText("{{NOM}}", nom || "");
+      body.replaceText("{{TITRE FORMATION}}", formationTitle);
+      body.replaceText("{{DATE}}", dateStr);
+      body.replaceText("{{HEURE DEBUT}}", heureDebutStr);
+      body.replaceText("{{HEURE FIN}}", heureFinStr);
+      body.replaceText("{{LIEU}}", lieuStr);
+      body.replaceText("{{CONNEXION}}", connexionInfo);
+      body.replaceText("{{DESCRIPTION}}", descriptionStr);
+      body.replaceText("{{APPLI}}", formationTitle);
+
       doc.saveAndClose();
 
       pdfAttachment = convocationDoc.getAs('application/pdf');
@@ -243,8 +312,8 @@ function sendConfirmationMail(sessionId, email) {
     + "<h2 style='margin: 0;'>Confirmation & Convocation de Formation</h2>"
     + "</div>"
     + "<div style='padding: 24px;'>"
-    + "<p>Bonjour,</p>"
-    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été enregistrée.</p>"
+    + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
+    + "<p>Votre inscription à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
