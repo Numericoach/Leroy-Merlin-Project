@@ -243,7 +243,7 @@ function extractFormId(input: string): string {
  */
 function updateFormChoices(): void {
   try {
-    const rawFormId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
+    const rawFormId = getParamValue("PARAMETRE_ID_EDITION") || getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
     const formId = extractFormId(rawFormId);
     if (!formId) {
       Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
@@ -258,7 +258,7 @@ function updateFormChoices(): void {
       try {
         const ui = SpreadsheetApp.getUi();
         if (ui) {
-          ui.alert("Formulaire introuvable", "Impossible d'ouvrir le Google Form avec l'ID renseigné dans PARAMETRES (" + formId + "). Vérifiez que l'ID est bien l'ID d'édition du formulaire.", ui.ButtonSet.OK);
+          ui.alert("Formulaire introuvable", "Impossible d'ouvrir le Google Form avec l'ID d'édition (" + formId + "). Vérifiez que l'ID est bien l'ID d'édition du formulaire.", ui.ButtonSet.OK);
         }
       } catch (e) {}
       return;
@@ -549,7 +549,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmed.</p>"
+    + "<p>Votre inscription pour <b>" + (nbParticipants || 1) + " participant(s)</b> à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
