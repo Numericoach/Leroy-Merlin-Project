@@ -1,33 +1,52 @@
 /* NUMERICOACH - INSCRIPTIONS LEROY MERLIN - @2026 */
 
 const ss: GoogleAppsScript.Spreadsheet.Spreadsheet = SpreadsheetApp.getActiveSpreadsheet(); 
-const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss.getSheetByName("PARAMETRES");
-const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss.getSheetByName("INSCRIPTIONS"); 
+const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("PARAMETRES") : null;
+const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null; 
 
 // Plages nommées des paramètres
 const plagesNommeesParametres: GoogleAppsScript.Spreadsheet.NamedRange[] = sheetParametres ? sheetParametres.getNamedRanges() : []; 
 const pnParaCel: Record<string, string> = {}; 
 const celParaPn: Record<string, string> = {}; 
 
-for (let i = 0; i < plagesNommeesParametres.length; i++) {
-  const thisNamedRangeName = plagesNommeesParametres[i].getName(); 
-  const thisNamedRangeNotation = plagesNommeesParametres[i].getRange().getA1Notation(); 
-  pnParaCel[thisNamedRangeName] = thisNamedRangeNotation; 
-  celParaPn[thisNamedRangeNotation] = thisNamedRangeName; 
+if (plagesNommeesParametres && plagesNommeesParametres.length > 0) {
+  for (let i = 0; i < plagesNommeesParametres.length; i++) {
+    const thisNamedRangeName = plagesNommeesParametres[i].getName(); 
+    const thisNamedRangeNotation = plagesNommeesParametres[i].getRange().getA1Notation(); 
+    pnParaCel[thisNamedRangeName] = thisNamedRangeNotation; 
+    celParaPn[thisNamedRangeNotation] = thisNamedRangeName; 
+  }
 }
 
-const pnParaValues: string[] = Object.values(pnParaCel); 
-const pnParaKeys: string[] = Object.keys(pnParaCel); 
+/**
+ * Helper sécurisé pour récupérer la valeur d'un paramètre sans jamais faire crasher le script
+ */
+function getParamValue(paramKey: string): string {
+  try {
+    if (!sheetParametres || !pnParaCel) return "";
+    const cellA1 = pnParaCel[paramKey];
+    if (!cellA1) return "";
+    const val = sheetParametres.getRange(cellA1).getValue();
+    return val !== null && val !== undefined ? val.toString().trim() : "";
+  } catch (err) {
+    Logger.log("Avertissement getParamValue(" + paramKey + ") : " + err);
+    return "";
+  }
+}
 
 /**
  * Trigger à l'ouverture de la feuille de calcul
  */
 function onOpen(): void {
-  const ui = SpreadsheetApp.getUi(); 
-  ui.createMenu("NUMERICOACH")
-    .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
-    .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
-    .addToUi(); 
+  try {
+    const ui = SpreadsheetApp.getUi(); 
+    ui.createMenu("NUMERICOACH")
+      .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
+      .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
+      .addToUi(); 
+  } catch (e) {
+    Logger.log("onOpen non interactif ou environnement batch.");
+  }
 }
 
 /**

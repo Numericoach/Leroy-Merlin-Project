@@ -2,11 +2,8 @@
  * Déclencheur sur soumission du formulaire d'inscription
  * Protégé par LockService contre les soumissions simultanées
  */
-function onSubmit(e?: GoogleAppsScript.Events.SheetsOnFormSubmit): void {
-  if (!e || !e.range) return;
-
+function onSubmit(e?: any): void {
   const lock = LockService.getScriptLock();
-  // Attendre jusqu'à 10 secondes pour acquérir le verrou exclusif
   const hasLock = lock.tryLock(10000);
   if (!hasLock) {
     Logger.log("Impossible d'acquérir le verrou. Soumission reportée ou ignorée.");
@@ -14,73 +11,124 @@ function onSubmit(e?: GoogleAppsScript.Events.SheetsOnFormSubmit): void {
   }
 
   try {
-    const thisResponses = e.range.getValues()[0];
-    const thisSheetName = e.range.getSheet().getSheetName();
+    let thisTime: any = new Date();
+    let thisEmail = "";
+    let thisSession = "";
+    let thisSheetName = "";
 
-    if (thisSheetName === "INSCRIPTIONSS" || thisSheetName === "INSCRIPTIONS FORM") {
-      const thisTime = thisResponses[0];
-      const thisEmail = (thisResponses[9] || thisResponses[1] || "").toString().trim(); // Colonne E-mail
-      const thisSession = (thisResponses[5] || thisResponses[3] || "").toString().trim(); // Colonne Session
-      if (!thisSession || !thisEmail) return;
-      
-      const match = thisSession.match(/\[(.*)\]/);
-      if (!match) return;
-      const thisSessionid = match[1];
-      
-      // 1. VÉRIFIER LES PLACES RESTANTES SOUS VERROU
-      const sheetSessions = ss.getSheetByName("SESSIONS");
-      let remainingSeats = 1; // Défaut à 1 si non trouvé
-      if (sheetSessions) {
-        const lastRowSessions = sheetSessions.getLastRow();
-        if (lastRowSessions >= 2) {
-          const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
-          for (let i = 0; i < sessionsData.length; i++) {
-            if (sessionsData[i][0] === thisSessionid) {
-              remainingSeats = Number(sessionsData[i][11]);
-              break;
-            }
+    if (e && e.range) {
+      try {
+        thisSheetName = e.range.getSheet().getName();
+      } catch (err) {}
+    }
+
+    // 1. EXTRACTION INTELLIGENTE DES DONNÉES DE LA SOUMISSION
+    if (e && e.namedValues) {
+      for (const key in e.namedValues) {
+        const keyLower = key.toLowerCase();
+        if (!thisEmail && (keyLower.indexOf("mail") > -1 || keyLower.indexOf("courriel") > -1 || keyLower.indexOf("email") > -1)) {
+          thisEmail = (e.namedValues[key][0] || "").toString().trim();
+        }
+        if (!thisSession && (keyLower.indexOf("session") > -1 || keyLower.indexOf("formation") > -1)) {
+          thisSession = (e.namedValues[key][0] || "").toString().trim();
+        }
+      }
+    }
+
+    if (e && e.values && Array.isArray(e.values)) {
+      if (!thisTime) thisTime = e.values[0];
+      e.values.forEach((val: any) => {
+        const valStr = (val || "").toString().trim();
+        if (!thisEmail && valStr.indexOf("@") > -1) {
+          thisEmail = valStr;
+        }
+        if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+          thisSession = valStr;
+        }
+      });
+    }
+
+    if ((!thisEmail || !thisSession) && e && e.range) {
+      const rowValues = e.range.getValues()[0];
+      if (rowValues && rowValues.length > 0) {
+        if (!thisTime) thisTime = rowValues[0];
+        rowValues.forEach((val: any) => {
+          const valStr = (val || "").toString().trim();
+          if (!thisEmail && valStr.indexOf("@") > -1) {
+            thisEmail = valStr;
+          }
+          if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+            thisSession = valStr;
+          }
+        });
+      }
+    }
+
+    if (!thisSession || !thisEmail) {
+      Logger.log("Données manquantes (Email: " + thisEmail + ", Session: " + thisSession + ")");
+      return;
+    }
+
+    // EXTRACTION SÉCURISÉE DE L'ID DE SESSION
+    let thisSessionid = thisSession;
+    const match = thisSession.match(/\[(.*?)\]/);
+    if (match && match[1]) {
+      thisSessionid = match[1].trim();
+    }
+
+    // 2. VÉRIFIER LES PLACES RESTANTES SOUS VERROU
+    const sheetSessions = ss.getSheetByName("SESSIONS");
+    let remainingSeats = 1;
+    if (sheetSessions) {
+      const lastRowSessions = sheetSessions.getLastRow();
+      if (lastRowSessions >= 2) {
+        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
+        for (let i = 0; i < sessionsData.length; i++) {
+          if (sessionsData[i][0] === thisSessionid) {
+            remainingSeats = Number(sessionsData[i][11]);
+            break;
           }
         }
       }
+    }
 
-      if (remainingSeats <= 0) {
-        Logger.log("Inscription refusée : plus de places disponibles pour " + thisSessionid);
-        return;
-      }
+    if (remainingSeats <= 0) {
+      Logger.log("Inscription refusée : plus de places disponibles pour " + thisSessionid);
+      return;
+    }
 
-      // 2. VÉRIFIER SI DÉJÀ INSCRIT SOUS VERROU
-      if (!sheetInscriptions) return;
-      const maxRows = sheetInscriptions.getMaxRows();
-      let verif: any[][] = [];
-      if (maxRows > 1) {
-        const sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-        verif = sessionsEmail.filter(row => (row[0] === thisSessionid && row[1] === thisEmail));
-      }
-      
-      if (verif.length > 0) {
-        Logger.log("Déjà inscrit : " + thisEmail + " à " + thisSessionid);
-        return;
-      }
+    // 3. VÉRIFIER SI DÉJÀ INSCRIT SOUS VERROU
+    if (!sheetInscriptions) return;
+    const maxRows = sheetInscriptions.getMaxRows();
+    let verif: any[][] = [];
+    if (maxRows > 1) {
+      const sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
+      verif = sessionsEmail.filter(row => (row[0] === thisSessionid && row[1] === thisEmail));
+    }
+    
+    if (verif.length > 0) {
+      Logger.log("Déjà inscrit : " + thisEmail + " à " + thisSessionid);
+      return;
+    }
 
-      // 3. INSCRIPTION DANS LE SHEETS
-      inscription(thisTime, thisSessionid, thisEmail);
+    // 4. INSCRIPTION DANS LE SHEETS
+    inscription(thisTime, thisSessionid, thisEmail);
 
-      // 4. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
-      addParticipantToCalendar(thisSessionid, thisEmail);
+    // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
+    addParticipantToCalendar(thisSessionid, thisEmail);
 
-      // 5. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
-      try {
-        sendConfirmationMail(thisSessionid, thisEmail);
-      } catch (mailErr) {
-        Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
-      }
-      
-      // 6. MISE À JOUR DYNAMIQUE DES CHOIX DU FORMULAIRE
-      try {
-        updateFormChoices();
-      } catch (formErr) {
-        Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
-      }
+    // 6. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
+    try {
+      sendConfirmationMail(thisSessionid, thisEmail);
+    } catch (mailErr) {
+      Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
+    }
+    
+    // 7. MISE À JOUR DYNAMIQUE DES CHOIX DU FORMULAIRE
+    try {
+      updateFormChoices();
+    } catch (formErr) {
+      Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
     }
   } catch (err) {
     Logger.log("Erreur critique dans onSubmit : " + err);
@@ -104,8 +152,7 @@ function inscription(time: any, sessionId: string, email: string): void {
  * Mettre à jour dynamiquement la liste déroulante des sessions disponibles dans le Google Form
  */
 function updateFormChoices(): void {
-  if (!sheetParametres) return;
-  const formId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_INSCRIPTION"]).getValue() as string;
+  const formId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
   if (!formId) {
     Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
     return;
@@ -116,7 +163,8 @@ function updateFormChoices(): void {
   let sessionItem: GoogleAppsScript.Forms.ListItem | null = null;
 
   for (let i = 0; i < items.length; i++) {
-    if (items[i].getTitle().indexOf("Inscription à la formation suivante") > -1 || items[i].getTitle().indexOf("Session") > -1) {
+    const title = items[i].getTitle();
+    if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
       sessionItem = items[i].asListItem();
       break;
     }
@@ -162,57 +210,49 @@ function updateFormChoices(): void {
  * Envoi de l'e-mail de convocation / confirmation avec gestion optionnelle du PDF si modèle présent
  */
 function sendConfirmationMail(sessionId: string, email: string): void {
-  if (!sheetParametres) return;
-
-  const urlDesinscription = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_DESINSCRIPTION"]).getValue() || "";
+  const urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
   
   let entrySessionId = "entry.2116080188";
-  if (pnParaCel["PARAMETRE_ENTRY_SESSION"]) {
-    const customEntry = sheetParametres.getRange(pnParaCel["PARAMETRE_ENTRY_SESSION"]).getValue();
-    if (customEntry) entrySessionId = customEntry.toString().trim();
-  }
+  const customEntry = getParamValue("PARAMETRE_ENTRY_SESSION");
+  if (customEntry) entrySessionId = customEntry;
 
   let entryEmailId = "entry.193822625";
-  if (pnParaCel["PARAMETRE_ENTRY_EMAIL"]) {
-    const customEmailEntry = sheetParametres.getRange(pnParaCel["PARAMETRE_ENTRY_EMAIL"]).getValue();
-    if (customEmailEntry) entryEmailId = customEmailEntry.toString().trim();
-  }
+  const customEmailEntry = getParamValue("PARAMETRE_ENTRY_EMAIL");
+  if (customEmailEntry) entryEmailId = customEmailEntry;
 
   const desinscriptionLink = "https://docs.google.com/forms/d/e/" + urlDesinscription + 
     "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
-  const connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "Lien Meet inclus dans votre invitation Agenda";
+  const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "Lien Meet inclus dans votre invitation Agenda";
 
   // Optionnel : Générer le PDF de convocation si l'ID du modèle est renseigné dans PARAMETRES
   let pdfAttachment: GoogleAppsScript.Base.Blob | null = null;
   let pdfUrl = "";
 
   try {
-    if (pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]) {
-      const modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue() as string;
-      if (modeleConvocationId && modeleConvocationId.length > 10) {
-        const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
-        const folderConvocationId = pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"] ? sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() as string : "";
-        const folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
-        
-        const convocationName = "Convocation_" + sessionId + "_" + email;
-        const convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
-        const doc = DocumentApp.openById(convocationDoc.getId());
-        const body = doc.getBody();
+    const modeleConvocationId = getParamValue("PARAMETRE_ID_MODELE_CONVOC");
+    if (modeleConvocationId && modeleConvocationId.length > 10) {
+      const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
+      const folderConvocationId = getParamValue("PARAMETRE_ID_DOSSIER_CONVOC");
+      const folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
+      
+      const convocationName = "Convocation_" + sessionId + "_" + email;
+      const convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
+      const doc = DocumentApp.openById(convocationDoc.getId());
+      const body = doc.getBody();
 
-        body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
-        body.replaceText("{{SESSION ID}}", sessionId);
-        body.replaceText("{{EMAIL}}", email);
-        doc.saveAndClose();
+      body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
+      body.replaceText("{{SESSION ID}}", sessionId);
+      body.replaceText("{{EMAIL}}", email);
+      doc.saveAndClose();
 
-        pdfAttachment = convocationDoc.getAs('application/pdf');
-        pdfAttachment.setName(convocationName + ".pdf");
-        const pdfFile = folderConvocation.createFile(pdfAttachment);
-        pdfUrl = pdfFile.getUrl();
+      pdfAttachment = convocationDoc.getAs('application/pdf');
+      pdfAttachment.setName(convocationName + ".pdf");
+      const pdfFile = folderConvocation.createFile(pdfAttachment);
+      pdfUrl = pdfFile.getUrl();
 
-        try { convocationDoc.setTrashed(true); } catch (e) {}
-      }
+      try { convocationDoc.setTrashed(true); } catch (e) {}
     }
   } catch (pdfErr) {
     Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);

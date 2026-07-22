@@ -2,13 +2,13 @@
   * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
   */
 function getOrCreateSessionEventId(sessionId: string): string | null {
-  if (!sheetParametres || !sessionId) return null;
+  if (!sessionId) return null;
 
   const lock = LockService.getScriptLock();
   const hasLock = lock.tryLock(10000); // Attendre max 10 secondes pour acquérir le verrou
 
   try {
-    const sheetSessionEvenements = ss.getSheetByName("SESSION AGENDA");
+    const sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
     if (!sheetSessionEvenements) return null;
 
     // 1. Vérifier si l'événement existe déjà dans le BDD Sheets
@@ -20,14 +20,19 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     }
 
     // 2. Si pas trouvé, créer l'événement
-    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
+    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+    if (!agendaId) {
+      Logger.log("PARAMETRE_ID_AGENDA non renseigné.");
+      return null;
+    }
+
     const agenda = CalendarApp.getCalendarById(agendaId);
     if (!agenda) {
       Logger.log("Agenda introuvable ID: " + agendaId);
       return null;
     }
 
-    const sheetSessions = ss.getSheetByName("SESSIONS");
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return null;
     const lastRow = sheetSessions.getLastRow();
     if (lastRow < 2) return null;
@@ -43,12 +48,12 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
 
     if (!targetSession) return null;
 
-    const sheetFormations = ss.getSheetByName("FORMATIONS");
+    const sheetFormations = ss ? ss.getSheetByName("FORMATIONS") : null;
     let formationTitle = "Formation Leroy Merlin";
     let formationDescription = "";
     let formationCompetences = "";
 
-    if (sheetFormations) {
+    if (sheetFormations && targetSession[1]) {
       const match = targetSession[1].match(/\[(.*)\]/);
       if (match) {
         const formationId = match[1];
@@ -86,8 +91,8 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     );
 
     const eventTitle = "Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
-    const textAgenda = sheetParametres.getRange(pnParaCel["PARAMETRE_TEXTE_AGENDA"]).getValue() || "";
-    const connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "";
+    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA");
+    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1");
 
     const description = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
@@ -116,9 +121,11 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
 function addParticipantToCalendar(sessionId: string, email: string): boolean {
   try {
     const eventId = getOrCreateSessionEventId(sessionId);
-    if (!eventId || !sheetParametres) return false;
+    if (!eventId) return false;
 
-    const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
+    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+    if (!agendaId) return false;
+
     const agenda = CalendarApp.getCalendarById(agendaId);
     if (!agenda) return false;
 
@@ -138,9 +145,7 @@ function addParticipantToCalendar(sessionId: string, email: string): boolean {
  * Parcourir les sessions pour créer les événements manquants
  */
 function createEventSession(): void {
-  if (!sheetParametres) return;
-
-  const sheetSessions = ss.getSheetByName("SESSIONS");
+  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
   if (!sheetSessions) return;
 
   const lastRow = sheetSessions.getLastRow();
@@ -159,8 +164,8 @@ function createEventSession(): void {
  * Vérifier les statuts des invités Google Agenda
  */
 function checkGuests(): void {
-  const sheetSessions = ss.getSheetByName("SESSIONS");
-  if (!sheetSessions || !sheetParametres) return;
+  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+  if (!sheetSessions) return;
   
   const lastRow = sheetSessions.getRange("Y1").getDataRegion().getLastRow();
   if (lastRow < 2) return;
@@ -170,7 +175,9 @@ function checkGuests(): void {
 
   let datas: any[][] = [];
 
-  const agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue() as string;
+  const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+  if (!agendaId) return;
+
   const agenda = CalendarApp.getCalendarById(agendaId);
   if (!agenda) return;
 

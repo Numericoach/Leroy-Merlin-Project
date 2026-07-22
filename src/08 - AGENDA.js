@@ -1,11 +1,11 @@
 function getOrCreateSessionEventId(sessionId) {
-  if (!sheetParametres || !sessionId) return null;
+  if (!sessionId) return null;
 
   var lock = LockService.getScriptLock();
   var hasLock = lock.tryLock(10000);
 
   try {
-    var sheetSessionEvenements = ss.getSheetByName("SESSION AGENDA");
+    var sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
     if (!sheetSessionEvenements) return null;
 
     var sessionEvenementValues = sheetSessionEvenements.getDataRange().getValues();
@@ -15,14 +15,19 @@ function getOrCreateSessionEventId(sessionId) {
       }
     }
 
-    var agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue();
+    var agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+    if (!agendaId) {
+      Logger.log("PARAMETRE_ID_AGENDA non renseigné.");
+      return null;
+    }
+
     var agenda = CalendarApp.getCalendarById(agendaId);
     if (!agenda) {
       Logger.log("Agenda introuvable ID: " + agendaId);
       return null;
     }
 
-    var sheetSessions = ss.getSheetByName("SESSIONS");
+    var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return null;
     var lastRow = sheetSessions.getLastRow();
     if (lastRow < 2) return null;
@@ -38,12 +43,12 @@ function getOrCreateSessionEventId(sessionId) {
 
     if (!targetSession) return null;
 
-    var sheetFormations = ss.getSheetByName("FORMATIONS");
+    var sheetFormations = ss ? ss.getSheetByName("FORMATIONS") : null;
     var formationTitle = "Formation Leroy Merlin";
     var formationDescription = "";
     var formationCompetences = "";
 
-    if (sheetFormations) {
+    if (sheetFormations && targetSession[1]) {
       var match = targetSession[1].match(/\[(.*)\]/);
       if (match) {
         var formationId = match[1];
@@ -81,8 +86,8 @@ function getOrCreateSessionEventId(sessionId) {
     );
 
     var eventTitle = "Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
-    var textAgenda = sheetParametres.getRange(pnParaCel["PARAMETRE_TEXTE_AGENDA"]).getValue() || "";
-    var connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "";
+    var textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA");
+    var connexionInfo = getParamValue("PARAMETRE_CONNEXION_1");
 
     var description = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
@@ -108,9 +113,11 @@ function getOrCreateSessionEventId(sessionId) {
 function addParticipantToCalendar(sessionId, email) {
   try {
     var eventId = getOrCreateSessionEventId(sessionId);
-    if (!eventId || !sheetParametres) return false;
+    if (!eventId) return false;
 
-    var agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue();
+    var agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+    if (!agendaId) return false;
+
     var agenda = CalendarApp.getCalendarById(agendaId);
     if (!agenda) return false;
 
@@ -127,9 +134,7 @@ function addParticipantToCalendar(sessionId, email) {
 }
 
 function createEventSession() {
-  if (!sheetParametres) return;
-
-  var sheetSessions = ss.getSheetByName("SESSIONS");
+  var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
   if (!sheetSessions) return;
 
   var lastRow = sheetSessions.getLastRow();
@@ -145,8 +150,8 @@ function createEventSession() {
 }
 
 function checkGuests() {
-  var sheetSessions = ss.getSheetByName("SESSIONS");
-  if (!sheetSessions || !sheetParametres) return;
+  var sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+  if (!sheetSessions) return;
   
   var lastRow = sheetSessions.getRange("Y1").getDataRegion().getLastRow();
   if (lastRow < 2) return;
@@ -156,7 +161,9 @@ function checkGuests() {
 
   var datas = [];
 
-  var agendaId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_AGENDA"]).getValue();
+  var agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+  if (!agendaId) return;
+
   var agenda = CalendarApp.getCalendarById(agendaId);
   if (!agenda) return;
 

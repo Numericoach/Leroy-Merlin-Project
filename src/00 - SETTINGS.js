@@ -1,29 +1,45 @@
 /* NUMERICOACH - INSCRIPTIONS LEROY MERLIN - @2026 */
 
 var ss = SpreadsheetApp.getActiveSpreadsheet();
-var sheetParametres = ss.getSheetByName("PARAMETRES");
-var sheetInscriptions = ss.getSheetByName("INSCRIPTIONS");
+var sheetParametres = ss ? ss.getSheetByName("PARAMETRES") : null;
+var sheetInscriptions = ss ? ss.getSheetByName("INSCRIPTIONS") : null;
 
 var plagesNommeesParametres = sheetParametres ? sheetParametres.getNamedRanges() : [];
 var pnParaCel = {};
 var celParaPn = {};
 
-for (var i = 0; i < plagesNommeesParametres.length; i++) {
-  var thisNamedRangeName = plagesNommeesParametres[i].getName();
-  var thisNamedRangeNotation = plagesNommeesParametres[i].getRange().getA1Notation();
-  pnParaCel[thisNamedRangeName] = thisNamedRangeNotation;
-  celParaPn[thisNamedRangeNotation] = thisNamedRangeName;
+if (plagesNommeesParametres && plagesNommeesParametres.length > 0) {
+  for (var i = 0; i < plagesNommeesParametres.length; i++) {
+    var thisNamedRangeName = plagesNommeesParametres[i].getName();
+    var thisNamedRangeNotation = plagesNommeesParametres[i].getRange().getA1Notation();
+    pnParaCel[thisNamedRangeName] = thisNamedRangeNotation;
+    celParaPn[thisNamedRangeNotation] = thisNamedRangeName;
+  }
 }
 
-var pnParaValues = Object.values(pnParaCel);
-var pnParaKeys = Object.keys(pnParaCel);
+function getParamValue(paramKey) {
+  try {
+    if (!sheetParametres || !pnParaCel) return "";
+    var cellA1 = pnParaCel[paramKey];
+    if (!cellA1) return "";
+    var val = sheetParametres.getRange(cellA1).getValue();
+    return val !== null && val !== undefined ? val.toString().trim() : "";
+  } catch (err) {
+    Logger.log("Avertissement getParamValue(" + paramKey + ") : " + err);
+    return "";
+  }
+}
 
 function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu("NUMERICOACH")
-    .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
-    .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
-    .addToUi();
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.createMenu("NUMERICOACH")
+      .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
+      .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
+      .addToUi();
+  } catch (e) {
+    Logger.log("onOpen non interactif ou environnement batch.");
+  }
 }
 
 function parseDateTime(dateVal, timeVal) {

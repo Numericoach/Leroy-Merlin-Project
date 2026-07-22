@@ -1,6 +1,4 @@
 function onSubmit(e) {
-  if (!e || !e.range) return;
-
   var lock = LockService.getScriptLock();
   var hasLock = lock.tryLock(10000);
   if (!hasLock) {
@@ -9,67 +7,116 @@ function onSubmit(e) {
   }
 
   try {
-    var thisResponses = e.range.getValues()[0];
-    var thisSheetName = e.range.getSheet().getSheetName();
+    var thisTime = new Date();
+    var thisEmail = "";
+    var thisSession = "";
+    var thisSheetName = "";
 
-    if (thisSheetName === "INSCRIPTIONSS" || thisSheetName === "INSCRIPTIONS FORM") {
-      var thisTime = thisResponses[0];
-      var thisEmail = (thisResponses[9] || thisResponses[1] || "").toString().trim();
-      var thisSession = (thisResponses[5] || thisResponses[3] || "").toString().trim();
-      if (!thisSession || !thisEmail) return;
-      
-      var match = thisSession.match(/\[(.*)\]/);
-      if (!match) return;
-      var thisSessionid = match[1];
-      
-      var sheetSessions = ss.getSheetByName("SESSIONS");
-      var remainingSeats = 1;
-      if (sheetSessions) {
-        var lastRowSessions = sheetSessions.getLastRow();
-        if (lastRowSessions >= 2) {
-          var sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
-          for (var i = 0; i < sessionsData.length; i++) {
-            if (sessionsData[i][0] === thisSessionid) {
-              remainingSeats = Number(sessionsData[i][11]);
-              break;
-            }
+    if (e && e.range) {
+      try {
+        thisSheetName = e.range.getSheet().getName();
+      } catch (err) {}
+    }
+
+    if (e && e.namedValues) {
+      for (var key in e.namedValues) {
+        var keyLower = key.toLowerCase();
+        if (!thisEmail && (keyLower.indexOf("mail") > -1 || keyLower.indexOf("courriel") > -1 || keyLower.indexOf("email") > -1)) {
+          thisEmail = (e.namedValues[key][0] || "").toString().trim();
+        }
+        if (!thisSession && (keyLower.indexOf("session") > -1 || keyLower.indexOf("formation") > -1)) {
+          thisSession = (e.namedValues[key][0] || "").toString().trim();
+        }
+      }
+    }
+
+    if (e && e.values && Array.isArray(e.values)) {
+      if (!thisTime) thisTime = e.values[0];
+      e.values.forEach(function(val) {
+        var valStr = (val || "").toString().trim();
+        if (!thisEmail && valStr.indexOf("@") > -1) {
+          thisEmail = valStr;
+        }
+        if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+          thisSession = valStr;
+        }
+      });
+    }
+
+    if ((!thisEmail || !thisSession) && e && e.range) {
+      var rowValues = e.range.getValues()[0];
+      if (rowValues && rowValues.length > 0) {
+        if (!thisTime) thisTime = rowValues[0];
+        rowValues.forEach(function(val) {
+          var valStr = (val || "").toString().trim();
+          if (!thisEmail && valStr.indexOf("@") > -1) {
+            thisEmail = valStr;
+          }
+          if (!thisSession && (valStr.indexOf("[") > -1 || valStr.toLowerCase().indexOf("formation") > -1 || valStr.toLowerCase().indexOf("session") > -1)) {
+            thisSession = valStr;
+          }
+        });
+      }
+    }
+
+    if (!thisSession || !thisEmail) {
+      Logger.log("Données manquantes (Email: " + thisEmail + ", Session: " + thisSession + ")");
+      return;
+    }
+
+    var thisSessionid = thisSession;
+    var match = thisSession.match(/\[(.*?)\]/);
+    if (match && match[1]) {
+      thisSessionid = match[1].trim();
+    }
+
+    var sheetSessions = ss.getSheetByName("SESSIONS");
+    var remainingSeats = 1;
+    if (sheetSessions) {
+      var lastRowSessions = sheetSessions.getLastRow();
+      if (lastRowSessions >= 2) {
+        var sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
+        for (var i = 0; i < sessionsData.length; i++) {
+          if (sessionsData[i][0] === thisSessionid) {
+            remainingSeats = Number(sessionsData[i][11]);
+            break;
           }
         }
       }
+    }
 
-      if (remainingSeats <= 0) {
-        Logger.log("Inscription refusée : plus de places disponibles pour " + thisSessionid);
-        return;
-      }
+    if (remainingSeats <= 0) {
+      Logger.log("Inscription refusée : plus de places disponibles pour " + thisSessionid);
+      return;
+    }
 
-      if (!sheetInscriptions) return;
-      var maxRows = sheetInscriptions.getMaxRows();
-      var verif = [];
-      if (maxRows > 1) {
-        var sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-        verif = sessionsEmail.filter(function(row) { return (row[0] === thisSessionid && row[1] === thisEmail); });
-      }
-      
-      if (verif.length > 0) {
-        Logger.log("Déjà inscrit : " + thisEmail + " à " + thisSessionid);
-        return;
-      }
+    if (!sheetInscriptions) return;
+    var maxRows = sheetInscriptions.getMaxRows();
+    var verif = [];
+    if (maxRows > 1) {
+      var sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
+      verif = sessionsEmail.filter(function(row) { return (row[0] === thisSessionid && row[1] === thisEmail); });
+    }
+    
+    if (verif.length > 0) {
+      Logger.log("Déjà inscrit : " + thisEmail + " à " + thisSessionid);
+      return;
+    }
 
-      inscription(thisTime, thisSessionid, thisEmail);
+    inscription(thisTime, thisSessionid, thisEmail);
 
-      addParticipantToCalendar(thisSessionid, thisEmail);
+    addParticipantToCalendar(thisSessionid, thisEmail);
 
-      try {
-        sendConfirmationMail(thisSessionid, thisEmail);
-      } catch (mailErr) {
-        Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
-      }
-      
-      try {
-        updateFormChoices();
-      } catch (formErr) {
-        Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
-      }
+    try {
+      sendConfirmationMail(thisSessionid, thisEmail);
+    } catch (mailErr) {
+      Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
+    }
+    
+    try {
+      updateFormChoices();
+    } catch (formErr) {
+      Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
     }
   } catch (err) {
     Logger.log("Erreur critique dans onSubmit : " + err);
@@ -87,8 +134,7 @@ function inscription(time, sessionId, email) {
 }
 
 function updateFormChoices() {
-  if (!sheetParametres) return;
-  var formId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_INSCRIPTION"]).getValue();
+  var formId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
   if (!formId) {
     Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
     return;
@@ -99,7 +145,8 @@ function updateFormChoices() {
   var sessionItem = null;
 
   for (var i = 0; i < items.length; i++) {
-    if (items[i].getTitle().indexOf("Inscription à la formation suivante") > -1 || items[i].getTitle().indexOf("Session") > -1) {
+    var title = items[i].getTitle();
+    if (title.indexOf("Inscription à la formation suivante") > -1 || title.indexOf("Session") > -1 || title.indexOf("formation") > -1) {
       sessionItem = items[i].asListItem();
       break;
     }
@@ -142,56 +189,48 @@ function updateFormChoices() {
 }
 
 function sendConfirmationMail(sessionId, email) {
-  if (!sheetParametres) return;
-
-  var urlDesinscription = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_FORMS_DESINSCRIPTION"]).getValue() || "";
+  var urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
   
   var entrySessionId = "entry.2116080188";
-  if (pnParaCel["PARAMETRE_ENTRY_SESSION"]) {
-    var customEntry = sheetParametres.getRange(pnParaCel["PARAMETRE_ENTRY_SESSION"]).getValue();
-    if (customEntry) entrySessionId = customEntry.toString().trim();
-  }
+  var customEntry = getParamValue("PARAMETRE_ENTRY_SESSION");
+  if (customEntry) entrySessionId = customEntry;
 
   var entryEmailId = "entry.193822625";
-  if (pnParaCel["PARAMETRE_ENTRY_EMAIL"]) {
-    var customEmailEntry = sheetParametres.getRange(pnParaCel["PARAMETRE_ENTRY_EMAIL"]).getValue();
-    if (customEmailEntry) entryEmailId = customEmailEntry.toString().trim();
-  }
+  var customEmailEntry = getParamValue("PARAMETRE_ENTRY_EMAIL");
+  if (customEmailEntry) entryEmailId = customEmailEntry;
 
   var desinscriptionLink = "https://docs.google.com/forms/d/e/" + urlDesinscription + 
     "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
-  var connexionInfo = sheetParametres.getRange(pnParaCel["PARAMETRE_CONNEXION_1"]).getValue() || "Lien Meet inclus dans votre invitation Agenda";
+  var connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "Lien Meet inclus dans votre invitation Agenda";
 
   var pdfAttachment = null;
   var pdfUrl = "";
 
   try {
-    if (pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]) {
-      var modeleConvocationId = sheetParametres.getRange(pnParaCel["PARAMETRE_ID_MODELE_CONVOC"]).getValue();
-      if (modeleConvocationId && modeleConvocationId.length > 10) {
-        var modeleConvocation = DriveApp.getFileById(modeleConvocationId);
-        var folderConvocationId = pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"] ? sheetParametres.getRange(pnParaCel["PARAMETRE_ID_DOSSIER_CONVOC"]).getValue() : "";
-        var folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
-        
-        var convocationName = "Convocation_" + sessionId + "_" + email;
-        var convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
-        var doc = DocumentApp.openById(convocationDoc.getId());
-        var body = doc.getBody();
+    var modeleConvocationId = getParamValue("PARAMETRE_ID_MODELE_CONVOC");
+    if (modeleConvocationId && modeleConvocationId.length > 10) {
+      var modeleConvocation = DriveApp.getFileById(modeleConvocationId);
+      var folderConvocationId = getParamValue("PARAMETRE_ID_DOSSIER_CONVOC");
+      var folderConvocation = folderConvocationId ? DriveApp.getFolderById(folderConvocationId) : DriveApp.getRootFolder();
+      
+      var convocationName = "Convocation_" + sessionId + "_" + email;
+      var convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
+      var doc = DocumentApp.openById(convocationDoc.getId());
+      var body = doc.getBody();
 
-        body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'))
-            .replaceText("{{SESSION ID}}", sessionId)
-            .replaceText("{{EMAIL}}", email);
-        doc.saveAndClose();
+      body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
+      body.replaceText("{{SESSION ID}}", sessionId);
+      body.replaceText("{{EMAIL}}", email);
+      doc.saveAndClose();
 
-        pdfAttachment = convocationDoc.getAs('application/pdf');
-        pdfAttachment.setName(convocationName + ".pdf");
-        var pdfFile = folderConvocation.createFile(pdfAttachment);
-        pdfUrl = pdfFile.getUrl();
+      pdfAttachment = convocationDoc.getAs('application/pdf');
+      pdfAttachment.setName(convocationName + ".pdf");
+      var pdfFile = folderConvocation.createFile(pdfAttachment);
+      pdfUrl = pdfFile.getUrl();
 
-        try { convocationDoc.setTrashed(true); } catch (e) {}
-      }
+      try { convocationDoc.setTrashed(true); } catch (e) {}
     }
   } catch (pdfErr) {
     Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);
@@ -205,7 +244,7 @@ function sendConfirmationMail(sessionId, email) {
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour,</p>"
-    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p>Votre inscription à la session de formation <b>[" + sessionId + "]</b> a bien été enregistrée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
