@@ -288,6 +288,8 @@ function updateFormChoices(): void {
  */
 function sendWaitingListMail(sessionId: string, email: string, prenom?: string, nom?: string, remainingSeats?: number, requestedSeats?: number): void {
   const formListeAttenteId = getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE");
+  const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
+  const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
   
   let entrySessionId = "entry.2116080188";
   const customEntry = getParamValue("PARAMETRE_ENTRY_SESSION");
@@ -327,11 +329,19 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
     + "Numericoach &bull; Gestion des Formations Leroy Merlin"
     + "</div></div>";
 
-  MailApp.sendEmail({
+  const mailOptions: any = {
     to: email,
     subject: subject,
-    htmlBody: htmlBody
-  });
+    htmlBody: htmlBody,
+    name: senderName
+  };
+
+  if (senderEmail && senderEmail.length > 3) {
+    mailOptions.from = senderEmail;
+    mailOptions.replyTo = senderEmail;
+  }
+
+  MailApp.sendEmail(mailOptions);
   Logger.log("Mail de liste d'attente envoyé à " + email + " pour la session " + sessionId);
 }
 
@@ -340,6 +350,8 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
  */
 function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants?: number): void {
   const urlDesinscription = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
+  const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
+  const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
   
   let entrySessionId = "entry.2116080188";
   const customEntry = getParamValue("PARAMETRE_ENTRY_SESSION");
@@ -462,11 +474,17 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "Numericoach &bull; Gestion des Formations Leroy Merlin"
     + "</div></div>";
 
-  const mailOptions: GoogleAppsScript.Mail.MailAdvancedParameters = {
+  const mailOptions: any = {
     to: email,
     subject: subject,
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    name: senderName
   };
+
+  if (senderEmail && senderEmail.length > 3) {
+    mailOptions.from = senderEmail;
+    mailOptions.replyTo = senderEmail;
+  }
 
   if (pdfAttachment) {
     mailOptions.attachments = [pdfAttachment];
