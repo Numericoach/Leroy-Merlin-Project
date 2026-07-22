@@ -394,25 +394,22 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
   const subject = "Session complète - Option Liste d'Attente - Formation Leroy Merlin [" + sessionId + "]";
   
   let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
-    + "<div style='background-color: #E67E22; padding: 20px; text-align: center; color: white;'>"
-    + "<h2 style='margin: 0;'>Session Complète - Liste d'Attente</h2>"
+    + "<div style='background-color: #78BE20; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0; font-weight: bold;'>Session complète - liste d'attente</h2>"
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
     + "<p>Nous avons bien reçu votre demande d'inscription pour <b>" + (requestedSeats || 1) + " participant(s)</b> à la session <b>[" + sessionId + "]</b>.</p>"
     + "<p style='color: #C0392B;'><b>Information importante :</b> Cette session ne dispose plus de places suffisantes (" + (remainingSeats && remainingSeats > 0 ? remainingSeats + " place(s) restante(s)" : "session complète") + ").</p>"
-    + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>Liste d'Attente</b> :</p>";
+    + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>liste d'attente</b> :</p>";
 
   if (formListeAttenteId) {
-    htmlBody += "<p style='text-align: center; margin: 25px 0;'><a href='" + listeAttenteLink + "' style='display:inline-block; background-color:#E67E22; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>Rejoindre la Liste d'Attente</a></p>";
+    htmlBody += "<p style='text-align: center; margin: 25px 0;'><a href='" + listeAttenteLink + "' style='display:inline-block; background-color:#78BE20; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>Rejoindre la liste d'attente</a></p>";
   } else {
     htmlBody += "<p><i>Vous serez recontacté dès qu’une nouvelle session sera ouverte.</i></p>";
   }
 
-  htmlBody += "</div>"
-    + "<div style='background-color: #f9f9f9; padding: 12px; text-align: center; font-size: 12px; color: #777;'>"
-    + "Numericoach &bull; Gestion des Formations Leroy Merlin"
-    + "</div></div>";
+  htmlBody += "</div></div>";
 
   const mailOptions: any = {
     to: email,
@@ -541,11 +538,11 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);
   }
 
-  const subject = "Convocation & Confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
+  const subject = "Convocation & confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
   
   let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
-    + "<div style='background-color: #0596DE; padding: 20px; text-align: center; color: white;'>"
-    + "<h2 style='margin: 0;'>Confirmation & Convocation de Formation</h2>"
+    + "<div style='background-color: #78BE20; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0; font-weight: bold;'>Confirmation & convocation de formation</h2>"
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
@@ -556,13 +553,10 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "</div>";
 
   if (pdfUrl !== "") {
-    htmlBody += "<p><a href='" + pdfUrl + "' style='display:inline-block; background-color:#0596DE; color:white; padding:10px 18px; text-decoration:none; border-radius:5px;'>Télécharger votre Convocation PDF</a></p>";
+    htmlBody += "<p><a href='" + pdfUrl + "' style='display:inline-block; background-color:#78BE20; color:white; padding:10px 18px; text-decoration:none; border-radius:5px; font-weight:bold;'>Télécharger votre Convocation PDF</a></p>";
   }
 
   htmlBody += "<p style='margin-top: 25px;'><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Demander une désinscription</a></p>"
-    + "</div>"
-    + "<div style='background-color: #f9f9f9; padding: 12px; text-align: center; font-size: 12px; color: #777;'>"
-    + "Numericoach &bull; Gestion des Formations Leroy Merlin"
     + "</div></div>";
 
   const mailOptions: any = {
