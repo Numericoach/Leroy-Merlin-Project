@@ -17,7 +17,7 @@ function onSubmit(e?: any): void {
     let thisCivilite = "";
     let thisPrenom = "";
     let thisNom = "";
-    const thisNbParticipants = 1; // 1 Inscription = 1 Entreprise
+    let thisNbParticipants = 1; // 1 Inscription = 1 Entreprise
     let thisSheetName = "";
 
     if (e && e.range) {
@@ -62,6 +62,12 @@ function onSubmit(e?: any): void {
         if (!thisNom && keyLower.indexOf("nom") > -1 && keyLower.indexOf("prenom") === -1) {
           thisNom = val;
         }
+        if ((keyLower.indexOf("nombre") > -1 && keyLower.indexOf("participant") > -1) || keyLower.indexOf("combien") > -1) {
+          const parsedNb = parseInt(val, 10);
+          if (!isNaN(parsedNb) && parsedNb > 0) {
+            thisNbParticipants = parsedNb;
+          }
+        }
       }
     }
 
@@ -78,6 +84,11 @@ function onSubmit(e?: any): void {
         }
         if (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1) {
           thisSession = valStr;
+        }
+        const valLower = valStr.toLowerCase();
+        if (!isNaN(parseInt(valStr, 10)) && valStr.length < 3 && parseInt(valStr, 10) > 0) {
+          // Fallback guess: if there is an isolated number < 100, might be participants
+          // We don't overwrite if it was already set cleanly via namedValues, but arrays values are tricky
         }
       });
     }
@@ -205,14 +216,14 @@ function onSubmit(e?: any): void {
     }
 
     // 4. INSCRIPTION DANS LE SHEETS AVEC L'HORODATEUR EXACT DU FORMULAIRE
-    inscription(thisTime, thisSessionid, thisEmail);
+    inscription(thisTime, thisSessionid, thisEmail, thisNbParticipants);
 
     // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
     addParticipantToCalendar(thisSessionid, thisEmail);
 
     // 6. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
     try {
-      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite);
+      sendConfirmationMail(thisSessionid, thisEmail, thisPrenom, thisNom, thisCivilite, thisNbParticipants);
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
     }
@@ -240,9 +251,9 @@ function onSubmit(e?: any): void {
 /**
  * Enregistrer l'inscription dans la feuille de calcul avec le timestamp exact du formulaire
  */
-function inscription(time: any, sessionId: string, email: string): void {
+function inscription(time: any, sessionId: string, email: string, nbParticipants: number = 1): void {
   if (sheetInscriptions) {
-    sheetInscriptions.appendRow([time, sessionId, email]);
+    sheetInscriptions.appendRow([time, sessionId, email, nbParticipants]);
   }
 }
 
@@ -555,7 +566,7 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
 /**
  * Envoi de l'e-mail de convocation / confirmation personnalisé avec le PDF complet
  */
-function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string): void {
+function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants: number = 1): void {
   const urlDesinscription = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
@@ -639,8 +650,8 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
       body.replaceText("{{CONNEXION}}", connexionInfo);
       body.replaceText("{{DESCRIPTION}}", descriptionStr);
       body.replaceText("{{APPLI}}", formationTitle);
-      body.replaceText("{{NB PARTICIPANTS}}", "1");
-      body.replaceText("{{PARTICIPANTS}}", "1");
+      body.replaceText("{{NB PARTICIPANTS}}", nbParticipants.toString());
+      body.replaceText("{{PARTICIPANTS}}", nbParticipants.toString());
 
       doc.saveAndClose();
 
