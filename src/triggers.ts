@@ -36,8 +36,8 @@ function onEditTrigger(e?: any): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    Logger.log("Modification détectée dans l'onglet : " + sheetName + " (Mise à jour automatique des choix du Formulaire...)");
-    updateFormChoices();
+    Logger.log("Modification détectée dans l'onglet : " + sheetName + " (Mise à jour désactivée à la demande de l'utilisateur)");
+    // updateFormChoices();
   } catch (err) {
     Logger.log("Erreur dans onEditTrigger : " + err);
   }

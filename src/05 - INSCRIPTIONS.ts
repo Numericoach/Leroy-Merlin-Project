@@ -218,19 +218,19 @@ function onSubmit(e?: any): void {
     }
     
     // 7. MISE À JOUR DYNAMIQUE DES CHOIX DU FORMULAIRE
-    try {
-      updateFormChoices();
-    } catch (formErr) {
-      Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
-    }
+    // Désactivé à la demande de l'utilisateur pour laisser la liste d'attente gérer les pleins
+    // try {
+    //   updateFormChoices();
+    // } catch (formErr) { ... }
+
   } catch (err) {
     Logger.log("Erreur critique dans onSubmit : " + err);
   } finally {
-    try {
-      updateFormChoices();
-    } catch (fErr) {
-      Logger.log("Erreur dans updateFormChoices (finally) : " + fErr);
-    }
+    // Désactivé
+    // try {
+    //   updateFormChoices();
+    // } catch (fErr) { ... }
+    
     if (hasLock) {
       lock.releaseLock();
     }
