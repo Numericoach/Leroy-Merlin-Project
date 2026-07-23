@@ -386,26 +386,46 @@ function updateFormChoices(): void {
     const lastRow = sheetSessions.getLastRow();
     if (lastRow < 2) return;
 
-    const values = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+    // Lecture depuis la colonne A (1) jusqu'à la colonne 20 (Col P) pour éviter tout décalage
+    const values = sheetSessions.getRange(2, 1, lastRow - 1, 20).getValues();
     const choices: string[] = [];
 
     values.forEach(function(row) {
-      const sessionId = (row[0] || "").toString().trim(); // Col B (ID SESSION)
-      const formationCol = (row[1] || "").toString().trim(); // Col C (FORMATION)
-      const dateVal = row[2]; // Col D (DATE)
-      const heureDebutVal = row[3]; // Col E (HEURE DEBUT)
-      const heureFinVal = row[4]; // Col F (HEURE FIN)
-      const infoComp = (row[8] || "").toString().trim(); // Col J (INFORMATION COMPLEMENTAIRE)
-      const publish = row[9]; // Col K (Publier)
-      const remaining = row[11]; // Col M (Places Restantes)
-      const moduleTitle = row[13] || formationCol || "Formation"; // Col O (MODULE TITRE)
+      const sessionId = (row[1] || "").toString().trim(); // Col B (ID SESSION)
+      const formationCol = (row[2] || "").toString().trim(); // Col C (FORMATION)
+      const dateVal = row[3]; // Col D (DATE)
+      const heureDebutVal = row[4]; // Col E (HEURE DEBUT)
+      const heureFinVal = row[5]; // Col F (HEURE FIN)
+      const infoComp = (row[9] || "").toString().trim(); // Col J (INFORMATION COMPLEMENTAIRE)
+      const publish = row[10]; // Col K (Publier)
+      const rawRemaining = parseFloat(String(row[12] || "").replace(",", ".")); // Col M (Places Restantes)
+      const nbPlaces = parseFloat(String(row[7] || "").replace(",", ".")); // Col H (NB DE PLACES)
+      const nbInscrits = parseFloat(String(row[11] || "").replace(",", ".")); // Col L (Nb Inscrits)
+      const moduleTitle = row[14] || formationCol || "Formation"; // Col O (MODULE TITRE)
 
-      const isPublished = (publish === true) || 
-                        (typeof publish === "string" && (publish.toUpperCase() === "TRUE" || publish.toUpperCase() === "VRAI" || publish.trim() === "1")) || 
-                        (typeof publish === "number" && publish === 1);
+      if (!sessionId || sessionId.toLowerCase().indexOf("ses-") === -1) {
+        return;
+      }
 
-      const remainingNum = parseFloat(String(remaining).replace(",", "."));
-      const hasSeats = !isNaN(remainingNum) && remainingNum > 0;
+      // Est publié si coché ou non-vide / non-false
+      const isPublished = Boolean(publish) && 
+                        String(publish).toUpperCase() !== "FALSE" && 
+                        String(publish).toUpperCase() !== "FAUX" && 
+                        String(publish) !== "0" && 
+                        String(publish).trim() !== "";
+
+      // Calcul robuste des places restantes : utilise Col M ou (Col H - Col L)
+      let remainingSeats = 0;
+      if (!isNaN(rawRemaining)) {
+        remainingSeats = rawRemaining;
+      } else if (!isNaN(nbPlaces)) {
+        const registered = !isNaN(nbInscrits) ? nbInscrits : 0;
+        remainingSeats = nbPlaces - registered;
+      } else {
+        remainingSeats = 1; // Fallback par défaut si non renseigné
+      }
+
+      const hasSeats = remainingSeats > 0;
 
       if (sessionId && isPublished && hasSeats) {
         const dateStr = formatDateClean(dateVal);
