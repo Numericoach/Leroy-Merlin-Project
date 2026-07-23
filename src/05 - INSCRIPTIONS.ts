@@ -513,12 +513,8 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
   const customEmailEntry = getParamValue("PARAMETRE_ENTRY_EMAIL");
   if (customEmailEntry) entryEmailId = customEmailEntry;
 
-  let listeAttenteLink = "#";
-  if (formListeAttenteId) {
-    listeAttenteLink = "https://docs.google.com/forms/d/e/" + formListeAttenteId + 
-      "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
-      "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
-  }
+  // Modification demandée : Forcer le lien Google Sites pour la liste d'attente
+  const listeAttenteLink = "https://sites.google.com/numericoach.fr/testleroymerlin/liste-attente";
 
   const subject = "Session complète - Option Liste d'Attente - Formation Leroy Merlin [" + sessionId + "]";
   
@@ -530,15 +526,9 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
     + "<p>Nous avons bien reçu votre demande d'inscription à la session <b>[" + sessionId + "]</b>.</p>"
     + "<p style='color: #C0392B;'><b>Information importante :</b> Cette session est actuellement complète.</p>"
-    + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>liste d'attente</b> :</p>";
-
-  if (formListeAttenteId) {
-    htmlBody += "<p style='text-align: center; margin: 25px 0;'><a href='" + listeAttenteLink + "' style='display:inline-block; background-color:#78BE20; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>Rejoindre la liste d'attente</a></p>";
-  } else {
-    htmlBody += "<p><i>Vous serez recontacté dès qu’une nouvelle session sera ouverte.</i></p>";
-  }
-
-  htmlBody += "</div></div>";
+    + "<p>Afin de ne pas rater les prochaines disponibilités ou une place libérée, vous pouvez vous inscrire sur notre <b>liste d'attente</b> :</p>"
+    + "<p style='text-align: center; margin: 25px 0;'><a href='" + listeAttenteLink + "' style='display:inline-block; background-color:#78BE20; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>Rejoindre la liste d'attente</a></p>"
+    + "</div></div>";
 
   const mailOptions: any = {
     to: email,
