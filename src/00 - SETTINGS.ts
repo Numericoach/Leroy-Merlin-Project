@@ -4,7 +4,7 @@ const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSh
 const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null; 
 
 /**
- * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES
+ * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES (Recherche flexible)
  */
 function getParamValue(paramKey: string): string {
   if (!sheetParametres) return "";
@@ -12,8 +12,15 @@ function getParamValue(paramKey: string): string {
   if (lastRow < 2) return "";
 
   const data = sheetParametres.getRange(2, 1, lastRow - 1, 2).getValues();
+  const searchClean = paramKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").trim().toLowerCase();
+
   for (let i = 0; i < data.length; i++) {
-    if (data[i][0] === paramKey) {
+    const rawKey = (data[i][0] || "").toString().trim();
+    if (!rawKey) continue;
+
+    const keyClean = rawKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").trim().toLowerCase();
+
+    if (rawKey === paramKey || keyClean === searchClean || rawKey.toLowerCase() === paramKey.toLowerCase()) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
   }
