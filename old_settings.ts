@@ -4,52 +4,23 @@ const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSh
 const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null; 
 
 /**
- * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES (Recherche dynamique et flexible)
+ * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES (Recherche flexible)
  */
 function getParamValue(paramKey: string): string {
-  const activeSs = ss || (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet ? SpreadsheetApp.getActiveSpreadsheet() : null);
-  const sheetParam = activeSs ? activeSs.getSheetByName("PARAMETRES") : null;
-  if (!sheetParam) return "";
-
-  const lastRow = sheetParam.getLastRow();
+  if (!sheetParametres) return "";
+  const lastRow = sheetParametres.getLastRow();
   if (lastRow < 2) return "";
 
-  const data = sheetParam.getRange(2, 1, lastRow - 1, 2).getValues();
+  const data = sheetParametres.getRange(2, 1, lastRow - 1, 2).getValues();
   const searchClean = paramKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").trim().toLowerCase();
 
   for (let i = 0; i < data.length; i++) {
     const rawKey = (data[i][0] || "").toString().trim();
     if (!rawKey) continue;
 
-    const keyClean = rawKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").replace(/[>]/g, "").trim().toLowerCase();
+    const keyClean = rawKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").trim().toLowerCase();
 
     if (rawKey === paramKey || keyClean === searchClean || rawKey.toLowerCase() === paramKey.toLowerCase()) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    
-    // Fallbacks très permissifs pour les paramètres souvent mal orthographiés ou avec apostrophes/accents
-    const lowerRaw = rawKey.toLowerCase();
-    const noAccentRaw = lowerRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-    if (paramKey === "PARAMETRE_ID_FORMS_LISTE_ATTENTE" && noAccentRaw.indexOf("liste d'attente") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ID_FORMS_DESINSCRIPTION" && noAccentRaw.indexOf("desinscription") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ENTRY_SESSION" && noAccentRaw.indexOf("entry session") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ENTRY_EMAIL" && noAccentRaw.indexOf("entry email") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ID_MODELE_CONVOC" && noAccentRaw.indexOf("modele") > -1 && noAccentRaw.indexOf("convoc") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ID_DOSSIER_CONVOC" && noAccentRaw.indexOf("dossier") > -1 && noAccentRaw.indexOf("convoc") > -1) {
-      return data[i][1] ? data[i][1].toString().trim() : "";
-    }
-    if (paramKey === "PARAMETRE_ID_AGENDA" && noAccentRaw.indexOf("id agenda") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
   }
@@ -62,7 +33,6 @@ function getParamValue(paramKey: string): string {
 function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('NUMERICOACH')
-    .addItem('Tester la génération de PDF', 'testPDFGeneration')
     .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
     .addItem('Installer les déclencheurs (Triggers)', 'setupTriggers')
     .addToUi();

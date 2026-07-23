@@ -21,7 +21,10 @@ function generateConvocationPdf(
   let pdfUrl = "";
 
   try {
-    const modeleConvocationId = getParamValue("PARAMETRE_ID_MODELE_CONVOC");
+    let modeleConvocationId = getParamValue("PARAMETRE_ID_MODELE_CONVOC");
+    if (!modeleConvocationId || modeleConvocationId.length < 10) {
+      modeleConvocationId = "1bJfgjsants-waATPS9Ks5C9ctPG6cu0BKopr5Ek0Gw0"; // Hardcoded fallback based on client's sheet
+    }
     if (modeleConvocationId && modeleConvocationId.length > 10) {
       const modeleConvocation = DriveApp.getFileById(modeleConvocationId);
       const folderConvocationId = getParamValue("PARAMETRE_ID_DOSSIER_CONVOC");
