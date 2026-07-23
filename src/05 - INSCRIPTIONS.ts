@@ -663,8 +663,17 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
 
       try { convocationDoc.setTrashed(true); } catch (e) {}
     }
-  } catch (pdfErr) {
+  } catch (pdfErr: any) {
     Logger.log("Avertissement : la génération du PDF n'a pas pu être effectuée (envoi sans pièce jointe) : " + pdfErr);
+    try {
+      MailApp.sendEmail(
+        email, 
+        "🛠️ LEROY MERLIN - ERREUR PDF (DEBUG)", 
+        "Bonjour,\nLa génération du PDF a échoué. Voici l'erreur technique capturée par le script :\n\n" + 
+        pdfErr.toString() + "\n\nStack:\n" + pdfErr.stack + 
+        "\n\nModele ID lu: '" + getParamValue("PARAMETRE_ID_MODELE_CONVOC") + "'"
+      );
+    } catch (e) {}
   }
 
   const subject = "Convocation & confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
