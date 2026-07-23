@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Formations Leroy Merlin</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: #ffffff;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+
+    .catalog-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 30px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .session-card {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .session-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      padding: 20px;
+      color: white;
+    }
+
+    .app-icon-container {
+      width: 50px;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-right: 15px;
+      overflow: hidden;
+    }
+
+    .app-icon-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      flex-grow: 1;
+      text-align: left;
+    }
+
+    .card-body {
+      padding: 25px 25px 15px 25px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .session-date {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin: 0 0 15px 0;
+    }
+
+    .session-details {
+      font-size: 0.95rem;
+      margin: 5px 0;
+      color: #444;
+    }
+
+    .separator {
+      height: 1px;
+      background-color: #ddd;
+      margin: 15px 0;
+      width: 100%;
+    }
+
+    .session-description {
+      font-size: 0.85rem;
+      font-weight: 700;
+      line-height: 1.4;
+      margin: 0;
+      color: #111;
+      flex-grow: 1;
+    }
+
+    .card-footer {
+      background-color: #e2e2e2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0;
+    }
+
+    .places-text {
+      padding: 15px 20px;
+      font-size: 0.9rem;
+      color: #444;
+    }
+
+    .places-text strong {
+      color: #000;
+    }
+
+    .btn-inscrire {
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 15px 25px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.2s;
+    }
+
+    .btn-inscrire:hover {
+      opacity: 0.9;
+    }
+
+    /* Message si vide */
+    .empty-catalog {
+      text-align: center;
+      padding: 50px;
+      color: #666;
+      font-size: 1.2rem;
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="catalog-container">
+    <? if (sessionsData && sessionsData.length > 0) { ?>
+      <? for (var i = 0; i < sessionsData.length; i++) { 
+           var s = sessionsData[i]; 
+      ?>
+        <div class="session-card">
+          <!-- Header dynamique avec la couleur de l'application -->
+          <div class="card-header" style="background-color: <?= s.couleur ?>;">
+            <div class="app-icon-container">
+              <? if (s.imageUrl) { ?>
+                <img src="<?= s.imageUrl ?>" alt="Icon">
+              <? } ?>
+            </div>
+            <h2><?= s.titre ?></h2>
+          </div>
+
+          <!-- Corps de la carte -->
+          <div class="card-body">
+            <!-- La date prend la couleur du thème -->
+            <h3 class="session-date" style="color: <?= s.couleur ?>;"><?= s.date ?></h3>
+            <p class="session-details"><?= s.horaire ?></p>
+            <p class="session-details">lieu : <?= s.lieu ?></p>
+            
+            <div class="separator"></div>
+            
+            <p class="session-description"><?= s.description ?></p>
+          </div>
+
+          <!-- Footer de la carte -->
+          <div class="card-footer">
+            <div class="places-text">
+              Plus que <strong><?= s.places ?></strong> places.
+            </div>
+            <!-- Le bouton prend la couleur du thème -->
+            <a href="<?= s.lienInscription ?>" class="btn-inscrire" style="background-color: <?= s.couleur ?>;" target="_blank">
+              Je m'inscris
+            </a>
+          </div>
+        </div>
+      <? } ?>
+    <? } else { ?>
+      <div class="empty-catalog">
+        Aucune session de formation n'est actuellement disponible.
+      </div>
+    <? } ?>
+  </div>
+
+</body>
+</html>
