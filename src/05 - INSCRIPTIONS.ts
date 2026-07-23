@@ -251,10 +251,20 @@ function inscription(time: any, sessionId: string, email: string): void {
  */
 function extractFormId(input: string): string {
   if (!input) return "";
-  const cleaned = input.trim();
+  let cleaned = input.trim();
+  if (cleaned.indexOf("/edit") > -1) {
+    cleaned = cleaned.split("/edit")[0];
+  }
+  if (cleaned.indexOf("/viewform") > -1) {
+    cleaned = cleaned.split("/viewform")[0];
+  }
   const match = cleaned.match(/\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/);
   if (match && match[1]) {
     return match[1];
+  }
+  if (cleaned.indexOf("/") > -1) {
+    const parts = cleaned.split("/").filter(p => p.trim() !== "");
+    return parts[parts.length - 1];
   }
   return cleaned;
 }
