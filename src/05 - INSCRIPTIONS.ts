@@ -253,7 +253,8 @@ function onSubmit(e?: any): void {
  */
 function inscription(time: any, sessionId: string, email: string, nbParticipants: number = 1): void {
   if (sheetInscriptions) {
-    sheetInscriptions.appendRow([time, sessionId, email, nbParticipants]);
+    // Revert : N'ajouter que 3 colonnes pour ne pas écraser les formules de la colonne D
+    sheetInscriptions.appendRow([time, sessionId, email]);
   }
 }
 

@@ -41,6 +41,15 @@ function getParamValue(paramKey: string): string {
     if (paramKey === "PARAMETRE_ENTRY_EMAIL" && lowerRaw.indexOf("entry email") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
+    if (paramKey === "PARAMETRE_ID_MODELE_CONVOC" && lowerRaw.indexOf("modèle de convocation") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    if (paramKey === "PARAMETRE_ID_DOSSIER_CONVOC" && lowerRaw.indexOf("dossier") > -1 && lowerRaw.indexOf("convocation") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    if (paramKey === "PARAMETRE_ID_AGENDA" && lowerRaw.indexOf("id agenda") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
   }
   return "";
 }
