@@ -29,16 +29,15 @@ function setupTriggers(): void {
 }
 
 /**
- * Fonction déclenchée lors d'une modification manuelle dans la feuille de calcul
+ * Fonction déclenchée lors de TOUTE modification manuelle dans la feuille de calcul
+ * (suppression de ligne dans INSCRIPTIONSS, modification de SESSIONS, PARAMETRES, FILLE ATTENTE, etc.)
  */
 function onEditTrigger(e?: any): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
-      Logger.log("Modification détectée dans : " + sheetName + " (Mise à jour du Formulaire...)");
-      updateFormChoices();
-    }
+    Logger.log("Modification détectée dans l'onglet : " + sheetName + " (Mise à jour automatique des choix du Formulaire...)");
+    updateFormChoices();
   } catch (err) {
     Logger.log("Erreur dans onEditTrigger : " + err);
   }

@@ -129,13 +129,35 @@ function onSubmit(e?: any): void {
     if (sheetSessions) {
       const lastRowSessions = sheetSessions.getLastRow();
       if (lastRowSessions >= 2) {
-        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 12).getValues();
+        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 13).getValues();
         for (let i = 0; i < sessionsData.length; i++) {
           const idInSheet = (sessionsData[i][0] || "").toString().trim();
           if (idInSheet === thisSessionid) {
             remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
             sessionFound = true;
             break;
+          }
+        }
+
+        // Recherche par comparaison si l'ID exact n'est pas dans des crochets
+        if (!sessionFound) {
+          const searchLower = thisSession.toLowerCase();
+          for (let i = 0; i < sessionsData.length; i++) {
+            const idInSheet = (sessionsData[i][0] || "").toString().trim();
+            const formationInSheet = (sessionsData[i][1] || "").toString().trim().toLowerCase();
+            const infoCompInSheet = (sessionsData[i][8] || "").toString().trim().toLowerCase();
+
+            if (idInSheet && (
+              searchLower.indexOf(idInSheet.toLowerCase()) > -1 ||
+              (infoCompInSheet && searchLower.indexOf("avec pratique") > -1 && infoCompInSheet.indexOf("avec pratique") > -1) ||
+              (infoCompInSheet && searchLower.indexOf("sans pratique") > -1 && infoCompInSheet.indexOf("sans pratique") > -1) ||
+              (formationInSheet && searchLower.indexOf(formationInSheet) > -1)
+            )) {
+              thisSessionid = idInSheet;
+              remainingSeatsAfterForm = Number(sessionsData[i][11]);
+              sessionFound = true;
+              break;
+            }
           }
         }
       }
@@ -204,6 +226,11 @@ function onSubmit(e?: any): void {
   } catch (err) {
     Logger.log("Erreur critique dans onSubmit : " + err);
   } finally {
+    try {
+      updateFormChoices();
+    } catch (fErr) {
+      Logger.log("Erreur dans updateFormChoices (finally) : " + fErr);
+    }
     if (hasLock) {
       lock.releaseLock();
     }

@@ -1,71 +1,63 @@
-/* NUMERICOACH - INSCRIPTIONS LEROY MERLIN - @2026 */
-
-const ss: GoogleAppsScript.Spreadsheet.Spreadsheet = SpreadsheetApp.getActiveSpreadsheet(); 
+// Configuration globale et variables réutilisables
+const ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null = typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet ? SpreadsheetApp.getActiveSpreadsheet() : null;
 const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("PARAMETRES") : null;
 const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null; 
 
-// Plages nommées des paramètres
-const plagesNommeesParametres: GoogleAppsScript.Spreadsheet.NamedRange[] = sheetParametres ? sheetParametres.getNamedRanges() : []; 
-const pnParaCel: Record<string, string> = {}; 
-const celParaPn: Record<string, string> = {}; 
-
-if (plagesNommeesParametres && plagesNommeesParametres.length > 0) {
-  for (let i = 0; i < plagesNommeesParametres.length; i++) {
-    const thisNamedRangeName = plagesNommeesParametres[i].getName(); 
-    const thisNamedRangeNotation = plagesNommeesParametres[i].getRange().getA1Notation(); 
-    pnParaCel[thisNamedRangeName] = thisNamedRangeNotation; 
-    celParaPn[thisNamedRangeNotation] = thisNamedRangeName; 
-  }
-}
-
 /**
- * Helper sécurisé pour récupérer la valeur d'un paramètre sans jamais faire crasher le script
+ * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES
  */
 function getParamValue(paramKey: string): string {
-  try {
-    if (!sheetParametres || !pnParaCel) return "";
-    const cellA1 = pnParaCel[paramKey];
-    if (!cellA1) return "";
-    const val = sheetParametres.getRange(cellA1).getValue();
-    return val !== null && val !== undefined ? val.toString().trim() : "";
-  } catch (err) {
-    Logger.log("Avertissement getParamValue(" + paramKey + ") : " + err);
-    return "";
+  if (!sheetParametres) return "";
+  const lastRow = sheetParametres.getLastRow();
+  if (lastRow < 2) return "";
+
+  const data = sheetParametres.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (let i = 0; i < data.length; i++) {
+    if (data[i][0] === paramKey) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
   }
+  return "";
 }
 
 /**
- * Trigger à l'ouverture de la feuille de calcul
+ * Menu personnalisé dans Google Sheets
  */
 function onOpen(): void {
-  try {
-    const ui = SpreadsheetApp.getUi(); 
-    ui.createMenu("NUMERICOACH")
-      .addItem("Installer les déclencheurs (Triggers)", "setupTriggers")
-      .addItem("Mettre à jour les sessions dans le Formulaire", "updateFormChoices")
-      .addToUi(); 
-  } catch (e) {
-    Logger.log("onOpen non interactif ou environnement batch.");
-  }
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('NUMERICOACH')
+    .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
+    .addItem('Installer les déclencheurs (Triggers)', 'setupTriggers')
+    .addToUi();
 }
 
 /**
- * Fonction d'aide globale pour fusionner proprement Date et Heure
+ * Parser une date et une heure provenant de Google Sheets
  */
 function parseDateTime(dateVal: Date | string | number | null | undefined, timeVal: Date | string | number | null | undefined): Date {
-  if (!dateVal) return new Date(0);
-  const d = new Date(dateVal);
-  let hours = 0;
+  let d = new Date();
+  if (dateVal instanceof Date) {
+    d = new Date(dateVal.getTime());
+  } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
+    const parts = dateVal.split('/');
+    if (parts.length === 3) {
+      d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+    } else {
+      d = new Date(dateVal);
+    }
+  }
+
+  let hours = 9;
   let minutes = 0;
-  
+
   if (timeVal instanceof Date) {
     hours = timeVal.getHours();
     minutes = timeVal.getMinutes();
-  } else if (typeof timeVal === 'string') {
-    const parts = timeVal.split(':');
-    if (parts.length >= 2) {
-      hours = parseInt(parts[0], 10);
-      minutes = parseInt(parts[1], 10);
+  } else if (typeof timeVal === 'string' && timeVal.trim() !== '') {
+    const timeParts = timeVal.split(':');
+    if (timeParts.length >= 2) {
+      hours = parseInt(timeParts[0], 10);
+      minutes = parseInt(timeParts[1], 10);
     }
   } else if (typeof timeVal === 'number') {
     const totalMinutes = Math.round(timeVal * 24 * 60);
@@ -83,10 +75,8 @@ function onEdit(e?: GoogleAppsScript.Events.SheetsOnEdit): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
-      Logger.log("Modification détectée dans : " + sheetName);
-      updateFormChoices();
-    }
+    Logger.log("Modification détectée dans l'onglet : " + sheetName + " (Mise à jour automatique...)");
+    updateFormChoices();
   } catch (err) {
     Logger.log("Erreur dans onEdit : " + err);
   }
