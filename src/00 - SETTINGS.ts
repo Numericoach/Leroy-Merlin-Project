@@ -21,9 +21,24 @@ function getParamValue(paramKey: string): string {
     const rawKey = (data[i][0] || "").toString().trim();
     if (!rawKey) continue;
 
-    const keyClean = rawKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").trim().toLowerCase();
+    const keyClean = rawKey.replace(/^PARAMETRE_/i, "").replace(/_/g, " ").replace(/[>]/g, "").trim().toLowerCase();
 
     if (rawKey === paramKey || keyClean === searchClean || rawKey.toLowerCase() === paramKey.toLowerCase()) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    
+    // Fallbacks très permissifs pour les paramètres souvent mal orthographiés ou avec apostrophes/accents
+    const lowerRaw = rawKey.toLowerCase();
+    if (paramKey === "PARAMETRE_ID_FORMS_LISTE_ATTENTE" && lowerRaw.indexOf("liste d'attente") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    if (paramKey === "PARAMETRE_ID_FORMS_DESINSCRIPTION" && lowerRaw.indexOf("désinscription") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    if (paramKey === "PARAMETRE_ENTRY_SESSION" && lowerRaw.indexOf("entry session") > -1) {
+      return data[i][1] ? data[i][1].toString().trim() : "";
+    }
+    if (paramKey === "PARAMETRE_ENTRY_EMAIL" && lowerRaw.indexOf("entry email") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
   }
