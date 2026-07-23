@@ -1,6 +1,27 @@
 /**
-  * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
-  */
+ * Helper pour obtenir l'agenda cible (ID renseigné dans PARAMETRES ou Agenda Principal par défaut)
+ */
+function getTargetCalendar(): GoogleAppsScript.Calendar.Calendar | null {
+  const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
+  if (agendaId && agendaId.trim() !== "") {
+    try {
+      const agenda = CalendarApp.getCalendarById(agendaId.trim());
+      if (agenda) return agenda;
+    } catch (err) {
+      Logger.log("Avertissement getCalendarById(" + agendaId + ") : " + err + ". Utilisation de l'agenda principal.");
+    }
+  }
+  try {
+    return CalendarApp.getDefaultCalendar();
+  } catch (err) {
+    Logger.log("Erreur lors de la récupération de l'agenda par défaut : " + err);
+    return null;
+  }
+}
+
+/**
+ * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
+ */
 function getOrCreateSessionEventId(sessionId: string): string | null {
   if (!sessionId) return null;
 
@@ -8,36 +29,55 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
   const hasLock = lock.tryLock(10000); // Attendre max 10 secondes pour acquérir le verrou
 
   try {
-    const sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
+    let sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
+    if (!sheetSessionEvenements && ss) {
+      try {
+        sheetSessionEvenements = ss.insertSheet("SESSION AGENDA");
+        sheetSessionEvenements.appendRow(["Horodateur", "ID SESSION", "ID EVENT AGENDA"]);
+      } catch (e) {
+        Logger.log("Erreur lors de la création de l'onglet SESSION AGENDA : " + e);
+      }
+    }
     if (!sheetSessionEvenements) return null;
 
-    // 1. Vérifier si l'événement existe déjà dans le BDD Sheets
-    const sessionEvenementValues = sheetSessionEvenements.getDataRange().getValues();
-    for (let i = 0; i < sessionEvenementValues.length; i++) {
-      if (sessionEvenementValues[i][1] === sessionId) {
-        return sessionEvenementValues[i][2] as string; // eventId existant
+    const agenda = getTargetCalendar();
+    if (!agenda) {
+      Logger.log("Aucun agenda Google disponible.");
+      return null;
+    }
+
+    // 1. Vérifier si l'événement existe déjà dans la BDD Sheets
+    const lastRowEvt = sheetSessionEvenements.getLastRow();
+    if (lastRowEvt >= 2) {
+      const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
+      for (let i = 0; i < sessionEvenementValues.length; i++) {
+        if (sessionEvenementValues[i][1] === sessionId) {
+          const storedId = sessionEvenementValues[i][2] as string;
+          if (storedId) {
+            // Vérifier que l'événement existe bien toujours dans Google Agenda
+            try {
+              let existingEvent = agenda.getEventById(storedId);
+              if (!existingEvent && storedId.indexOf("@") === -1) {
+                existingEvent = agenda.getEventById(storedId + "@google.com");
+              }
+              if (existingEvent) {
+                return storedId;
+              }
+            } catch (checkErr) {
+              Logger.log("Avertissement vérification événement existant : " + checkErr);
+            }
+          }
+        }
       }
     }
 
-    // 2. Si pas trouvé, créer l'événement
-    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
-    if (!agendaId) {
-      Logger.log("PARAMETRE_ID_AGENDA non renseigné.");
-      return null;
-    }
-
-    const agenda = CalendarApp.getCalendarById(agendaId);
-    if (!agenda) {
-      Logger.log("Agenda introuvable ID: " + agendaId);
-      return null;
-    }
-
+    // 2. Si pas trouvé ou supprimé, créer l'événement dans Google Agenda
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return null;
     const lastRow = sheetSessions.getLastRow();
     if (lastRow < 2) return null;
 
-    const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 5).getValues();
+    const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
     let targetSession: any[] | null = null;
     for (let i = 0; i < sessionsValues.length; i++) {
       if (sessionsValues[i][0] === sessionId) {
@@ -49,50 +89,35 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     if (!targetSession) return null;
 
     const sheetFormations = ss ? ss.getSheetByName("FORMATIONS") : null;
-    let formationTitle = "Formation Leroy Merlin";
+    let formationTitle = targetSession[13] || "Formation Leroy Merlin";
     let formationDescription = "";
     let formationCompetences = "";
 
     if (sheetFormations && targetSession[1]) {
-      const match = targetSession[1].match(/\[(.*)\]/);
+      const match = targetSession[1].toString().match(/\[(.*)\]/);
       if (match) {
         const formationId = match[1];
-        const formationsValues = sheetFormations.getDataRange().getValues();
-        for (let i = 0; i < formationsValues.length; i++) {
-          if (formationsValues[i][1] === formationId) {
-            formationTitle = formationsValues[i][2] || formationTitle;
-            formationDescription = formationsValues[i][4] || "";
-            formationCompetences = formationsValues[i][6] || "";
-            break;
+        const lastRowForm = sheetFormations.getLastRow();
+        if (lastRowForm >= 2) {
+          const formationsValues = sheetFormations.getRange(2, 1, lastRowForm - 1, 7).getValues();
+          for (let i = 0; i < formationsValues.length; i++) {
+            if (formationsValues[i][1] === formationId) {
+              formationTitle = formationsValues[i][2] || formationTitle;
+              formationDescription = formationsValues[i][4] || "";
+              formationCompetences = formationsValues[i][6] || "";
+              break;
+            }
           }
         }
       }
     }
 
-    const thisSessionDate = new Date(targetSession[2]);
-    const thisSessionHeureDebut = new Date(targetSession[3]);
-    const dateDebut = new Date(
-      thisSessionDate.getFullYear(),
-      thisSessionDate.getMonth(),
-      thisSessionDate.getDate(),
-      thisSessionHeureDebut.getHours(),
-      thisSessionHeureDebut.getMinutes(),
-      0
-    );
-
-    const thisSessionHeureFin = new Date(targetSession[4]);
-    const dateFin = new Date(
-      thisSessionDate.getFullYear(),
-      thisSessionDate.getMonth(),
-      thisSessionDate.getDate(),
-      thisSessionHeureFin.getHours(),
-      thisSessionHeureFin.getMinutes(),
-      0
-    );
+    const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
+    const dateFin = parseDateTime(targetSession[2], targetSession[4]);
 
     const eventTitle = "Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
-    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA");
-    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1");
+    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
+    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
     const description = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
@@ -119,24 +144,40 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
  * Ajouter un participant comme invité dans l'événement Google Agenda (Découplé et sécurisé)
  */
 function addParticipantToCalendar(sessionId: string, email: string): boolean {
+  if (!sessionId || !email) return false;
   try {
+    const agenda = getTargetCalendar();
+    if (!agenda) {
+      Logger.log("Agenda introuvable pour ajouter l'invité.");
+      return false;
+    }
+
     const eventId = getOrCreateSessionEventId(sessionId);
-    if (!eventId) return false;
+    if (!eventId) {
+      Logger.log("Impossible d'obtenir l'ID d'événement pour la session : " + sessionId);
+      return false;
+    }
 
-    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
-    if (!agendaId) return false;
+    let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+    try {
+      event = agenda.getEventById(eventId);
+    } catch (e) {}
 
-    const agenda = CalendarApp.getCalendarById(agendaId);
-    if (!agenda) return false;
+    if (!event && eventId.indexOf("@") === -1) {
+      try {
+        event = agenda.getEventById(eventId + "@google.com");
+      } catch (e) {}
+    }
 
-    const event = agenda.getEventById(eventId);
     if (event) {
       event.addGuest(email);
       Logger.log("Invité ajouté avec succès à Google Agenda : " + email + " pour session " + sessionId);
       return true;
+    } else {
+      Logger.log("Événement Agenda introuvable avec ID: " + eventId);
     }
   } catch (err) {
-    Logger.log("Erreur lors de l'ajout de l'invité à l’agenda : " + err);
+    Logger.log("Erreur lors de l'ajout de l'invité à l’agenda (" + email + ") : " + err);
   }
   return false;
 }
@@ -145,17 +186,25 @@ function addParticipantToCalendar(sessionId: string, email: string): boolean {
  * Retirer un participant d'un événement Google Agenda lors d'une désinscription
  */
 function removeParticipantFromCalendar(sessionId: string, email: string): boolean {
+  if (!sessionId || !email) return false;
   try {
+    const agenda = getTargetCalendar();
+    if (!agenda) return false;
+
     const eventId = getOrCreateSessionEventId(sessionId);
     if (!eventId) return false;
 
-    const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
-    if (!agendaId) return false;
+    let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+    try {
+      event = agenda.getEventById(eventId);
+    } catch (e) {}
 
-    const agenda = CalendarApp.getCalendarById(agendaId);
-    if (!agenda) return false;
+    if (!event && eventId.indexOf("@") === -1) {
+      try {
+        event = agenda.getEventById(eventId + "@google.com");
+      } catch (e) {}
+    }
 
-    const event = agenda.getEventById(eventId);
     if (event) {
       event.removeGuest(email);
       Logger.log("Invité retiré avec succès de Google Agenda : " + email + " pour session " + sessionId);
@@ -201,16 +250,16 @@ function checkGuests(): void {
 
   let datas: any[][] = [];
 
-  const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
-  if (!agendaId) return;
-
-  const agenda = CalendarApp.getCalendarById(agendaId);
+  const agenda = getTargetCalendar();
   if (!agenda) return;
 
   eventIds.forEach(function (eventId) {
     if (eventId !== "") {
       try {
-        const thisEvent = agenda.getEventById(eventId);
+        let thisEvent = agenda.getEventById(eventId);
+        if (!thisEvent && eventId.indexOf("@") === -1) {
+          thisEvent = agenda.getEventById(eventId + "@google.com");
+        }
         if (!thisEvent) return;
         const thisEventTitle = thisEvent.getTitle();
         const thisGuests = thisEvent.getGuestList();
