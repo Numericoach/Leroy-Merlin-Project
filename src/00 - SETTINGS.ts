@@ -29,25 +29,27 @@ function getParamValue(paramKey: string): string {
     
     // Fallbacks très permissifs pour les paramètres souvent mal orthographiés ou avec apostrophes/accents
     const lowerRaw = rawKey.toLowerCase();
-    if (paramKey === "PARAMETRE_ID_FORMS_LISTE_ATTENTE" && lowerRaw.indexOf("liste d'attente") > -1) {
+    const noAccentRaw = lowerRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    if (paramKey === "PARAMETRE_ID_FORMS_LISTE_ATTENTE" && noAccentRaw.indexOf("liste d'attente") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ID_FORMS_DESINSCRIPTION" && lowerRaw.indexOf("désinscription") > -1) {
+    if (paramKey === "PARAMETRE_ID_FORMS_DESINSCRIPTION" && noAccentRaw.indexOf("desinscription") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ENTRY_SESSION" && lowerRaw.indexOf("entry session") > -1) {
+    if (paramKey === "PARAMETRE_ENTRY_SESSION" && noAccentRaw.indexOf("entry session") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ENTRY_EMAIL" && lowerRaw.indexOf("entry email") > -1) {
+    if (paramKey === "PARAMETRE_ENTRY_EMAIL" && noAccentRaw.indexOf("entry email") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ID_MODELE_CONVOC" && lowerRaw.indexOf("modèle de convocation") > -1) {
+    if (paramKey === "PARAMETRE_ID_MODELE_CONVOC" && noAccentRaw.indexOf("modele") > -1 && noAccentRaw.indexOf("convocation") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ID_DOSSIER_CONVOC" && lowerRaw.indexOf("dossier") > -1 && lowerRaw.indexOf("convocation") > -1) {
+    if (paramKey === "PARAMETRE_ID_DOSSIER_CONVOC" && noAccentRaw.indexOf("dossier") > -1 && noAccentRaw.indexOf("convocation") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
-    if (paramKey === "PARAMETRE_ID_AGENDA" && lowerRaw.indexOf("id agenda") > -1) {
+    if (paramKey === "PARAMETRE_ID_AGENDA" && noAccentRaw.indexOf("id agenda") > -1) {
       return data[i][1] ? data[i][1].toString().trim() : "";
     }
   }
