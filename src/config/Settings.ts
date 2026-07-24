@@ -1,7 +1,19 @@
 // Configuration globale et variables réutilisables
-const ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null = typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet ? SpreadsheetApp.getActiveSpreadsheet() : null;
+function getActiveSpreadsheetRobust(): GoogleAppsScript.Spreadsheet.Spreadsheet | null {
+  if (typeof SpreadsheetApp === 'undefined') return null;
+  let s = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.getActive();
+  if (s) return s;
+  
+  try {
+    const files = DriveApp.getFilesByName("LEROY MERLIN - TABLEAU DE BORD - FORMATIONS");
+    if (files.hasNext()) return SpreadsheetApp.openById(files.next().getId());
+  } catch (e) {}
+  return null;
+}
+
+const ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null = getActiveSpreadsheetRobust();
 const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("PARAMETRES") : null;
-const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null; 
+const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null;
 
 /**
  * Récupérer la valeur d'un paramètre dans la feuille PARAMETRES (Recherche dynamique et flexible)

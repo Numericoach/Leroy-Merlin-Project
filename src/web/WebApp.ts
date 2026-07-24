@@ -15,7 +15,7 @@ function doGet(e: any): GoogleAppsScript.HTML.HtmlOutput {
  * Récupère et formate les sessions disponibles depuis l'onglet SESSIONS
  */
 function getAvailableSessionsForWeb(): any[] {
-  const activeSs = ss || (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet ? SpreadsheetApp.getActiveSpreadsheet() : null);
+  const activeSs = ss;
   const sheetSessions = activeSs ? activeSs.getSheetByName("SESSIONS") : null;
   if (!sheetSessions) return [];
 

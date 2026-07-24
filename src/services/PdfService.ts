@@ -15,7 +15,11 @@ function generateConvocationPdf(
   lieuStr: string,
   connexionInfo: string,
   descriptionStr: string,
-  nbParticipants: number
+  nbParticipants: number,
+  adresseLieu: string = "",
+  cpLieu: string = "",
+  villeLieu: string = "",
+  infoCompStr: string = ""
 ): { pdfAttachment: GoogleAppsScript.Base.Blob | null, pdfUrl: string } {
   let pdfAttachment: GoogleAppsScript.Base.Blob | null = null;
   let pdfUrl = "";
@@ -33,24 +37,38 @@ function generateConvocationPdf(
       const convocationName = "Convocation_" + sessionId + "_" + email;
       const convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
       const doc = DocumentApp.openById(convocationDoc.getId());
-      const body = doc.getBody();
+      
+      const replaceVariables = (element: any) => {
+        if (!element) return;
+        try {
+          element.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
+          element.replaceText("{{SESSION ID}}", sessionId);
+          element.replaceText("{{EMAIL}}", email);
+          element.replaceText("{{CIVILITE}}", civilite || "");
+          element.replaceText("{{PRENOM}}", prenom || "");
+          element.replaceText("{{NOM}}", nom || "");
+          element.replaceText("{{TITRE FORMATION}}", formationTitle);
+          element.replaceText("{{DATE}}", dateStr);
+          element.replaceText("{{HEURE DEBUT}}", heureDebutStr);
+          element.replaceText("{{HEURE FIN}}", heureFinStr);
+          element.replaceText("{{LIEU}}", lieuStr);
+          element.replaceText("{{CONNEXION}}", connexionInfo);
+          element.replaceText("{{DESCRIPTION}}", descriptionStr);
+          element.replaceText("{{APPLI}}", formationTitle);
+          element.replaceText("{{NB PARTICIPANTS}}", nbParticipants.toString());
+          element.replaceText("{{PARTICIPANTS}}", nbParticipants.toString());
+          element.replaceText("{{ADRESSE LIEU}}", adresseLieu || "");
+          element.replaceText("{{CP}}", cpLieu || "");
+          element.replaceText("{{VILLE}}", villeLieu || "");
+          element.replaceText("{{INFOS COMPLEMENTAIRES}}", infoCompStr || "");
+        } catch (e) {
+          // ignore
+        }
+      };
 
-      body.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
-      body.replaceText("{{SESSION ID}}", sessionId);
-      body.replaceText("{{EMAIL}}", email);
-      body.replaceText("{{CIVILITE}}", civilite || "");
-      body.replaceText("{{PRENOM}}", prenom || "");
-      body.replaceText("{{NOM}}", nom || "");
-      body.replaceText("{{TITRE FORMATION}}", formationTitle);
-      body.replaceText("{{DATE}}", dateStr);
-      body.replaceText("{{HEURE DEBUT}}", heureDebutStr);
-      body.replaceText("{{HEURE FIN}}", heureFinStr);
-      body.replaceText("{{LIEU}}", lieuStr);
-      body.replaceText("{{CONNEXION}}", connexionInfo);
-      body.replaceText("{{DESCRIPTION}}", descriptionStr);
-      body.replaceText("{{APPLI}}", formationTitle);
-      body.replaceText("{{NB PARTICIPANTS}}", nbParticipants.toString());
-      body.replaceText("{{PARTICIPANTS}}", nbParticipants.toString());
+      replaceVariables(doc.getHeader());
+      replaceVariables(doc.getFooter());
+      replaceVariables(doc.getBody());
 
       doc.saveAndClose();
 

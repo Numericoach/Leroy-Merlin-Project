@@ -82,6 +82,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   let lieuStr = "";
   let descriptionStr = "";
 
+  let infoCompStr = "";
   const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
   if (sheetSessions) {
     const lastRow = sheetSessions.getLastRow();
@@ -103,7 +104,32 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
             heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
           }
           lieuStr = sessionsValues[i][7] || "";
+          infoCompStr = sessionsValues[i][8] || "";
           break;
+        }
+      }
+    }
+  }
+
+  let adresseLieu = "";
+  let cpLieu = "";
+  let villeLieu = "";
+
+  const lieuMatch = lieuStr.match(/\[(.*?)\]/);
+  if (lieuMatch && lieuMatch[1]) {
+    const lieuId = lieuMatch[1];
+    const sheetLieux = ss ? ss.getSheetByName("LIEUX") : null;
+    if (sheetLieux) {
+      const lieuxLastRow = sheetLieux.getLastRow();
+      if (lieuxLastRow >= 2) {
+        const lieuxValues = sheetLieux.getRange(2, 2, lieuxLastRow - 1, 6).getValues();
+        for (let j = 0; j < lieuxValues.length; j++) {
+          if (lieuxValues[j][0] === lieuId) {
+            adresseLieu = lieuxValues[j][2] || "";
+            cpLieu = lieuxValues[j][3] || "";
+            villeLieu = lieuxValues[j][4] || "";
+            break;
+          }
         }
       }
     }
@@ -113,7 +139,8 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   const pdfResult = generateConvocationPdf(
     sessionId, email, prenom || "", nom || "", civilite || "", 
     formationTitle, dateStr, heureDebutStr, heureFinStr, lieuStr, 
-    connexionInfo, descriptionStr, nbParticipants
+    connexionInfo, descriptionStr, nbParticipants,
+    adresseLieu, cpLieu, villeLieu, infoCompStr
   );
 
   const subject = "Convocation & confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";

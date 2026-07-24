@@ -17,35 +17,44 @@ oldFiles.forEach(file => {
   }
 });
 
-const files = fs.readdirSync(srcDir);
-
-files.forEach(file => {
-  const srcPath = path.join(srcDir, file);
-  const stat = fs.statSync(srcPath);
-
-  if (stat.isFile()) {
-    if (file.endsWith('.ts')) {
-      const distJsPath = path.join(distDir, file.replace(/\.ts$/, '.js'));
-      const tsCode = fs.readFileSync(srcPath, 'utf8');
-      const result = ts.transpileModule(tsCode, {
-        compilerOptions: {
-          target: ts.ScriptTarget.ES2020,
-          module: ts.ModuleKind.None,
-          removeComments: false
-        }
-      });
-
-      let code = result.outputText;
-      code = code.replace(/Object\.defineProperty\(exports,\s*"__esModule",\s*\{\s*value:\s*true\s*\}\);?/g, '');
-      code = code.replace(/exports\.[a-zA-Z0-9_]+\s*=\s*/g, '');
-      code = code.replace(/^export\s+/gm, '');
-
-      fs.writeFileSync(distJsPath, code);
-      console.log(`Compiled src/${file} -> dist/${path.basename(distJsPath)}`);
+function getAllFiles(dirPath, arrayOfFiles) {
+  files = fs.readdirSync(dirPath);
+  arrayOfFiles = arrayOfFiles || [];
+  files.forEach(function(file) {
+    if (fs.statSync(path.join(dirPath, file)).isDirectory()) {
+      arrayOfFiles = getAllFiles(path.join(dirPath, file), arrayOfFiles);
     } else {
-      const distPath = path.join(distDir, file);
-      fs.copyFileSync(srcPath, distPath);
-      console.log(`Copied src/${file} -> dist/${file}`);
+      arrayOfFiles.push(path.join(dirPath, file));
     }
+  });
+  return arrayOfFiles;
+}
+
+const allFiles = getAllFiles(srcDir);
+
+allFiles.forEach(srcPath => {
+  const fileBasename = path.basename(srcPath);
+  if (fileBasename.endsWith('.ts')) {
+    const distJsPath = path.join(distDir, fileBasename.replace(/\.ts$/, '.js'));
+    const tsCode = fs.readFileSync(srcPath, 'utf8');
+    const result = ts.transpileModule(tsCode, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2020,
+        module: ts.ModuleKind.None,
+        removeComments: false
+      }
+    });
+
+    let code = result.outputText;
+    code = code.replace(/Object\.defineProperty\(exports,\s*"__esModule",\s*\{\s*value:\s*true\s*\}\);?/g, '');
+    code = code.replace(/exports\.[a-zA-Z0-9_]+\s*=\s*/g, '');
+    code = code.replace(/^export\s+/gm, '');
+
+    fs.writeFileSync(distJsPath, code);
+    console.log(`Compiled ${srcPath} -> dist/${fileBasename.replace(/\.ts$/, '.js')}`);
+  } else {
+    const distPath = path.join(distDir, fileBasename);
+    fs.copyFileSync(srcPath, distPath);
+    console.log(`Copied ${srcPath} -> dist/${fileBasename}`);
   }
 });
