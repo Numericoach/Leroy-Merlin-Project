@@ -3,62 +3,25 @@
  */
 function updateFormChoices(): void {
   try {
-    let rawFormId = getParamValue("PARAMETRE_ID_EDITION");
-    if (!rawFormId || rawFormId.trim() === "") {
-      rawFormId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
+    let rawMainFormId = getParamValue("PARAMETRE_ID_EDITION");
+    if (!rawMainFormId || rawMainFormId.trim() === "") {
+      rawMainFormId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
     }
-    const formId = extractFormId(rawFormId);
-    if (!formId) {
+    const mainFormId = extractFormId(rawMainFormId);
+    const waitingFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE"));
+    const unsubFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
+
+    if (!mainFormId) {
       Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
       if (ss) ss.toast("❌ ID Formulaire non trouvé dans l'onglet PARAMETRES.", "NUMERICOACH", 6);
       return;
     }
 
-    let form: GoogleAppsScript.Forms.Form;
-    try {
-      form = FormApp.openById(formId);
-    } catch (openErr) {
-      Logger.log("Avertissement : impossible d'ouvrir le Google Form avec l'ID '" + formId + "' : " + openErr);
-      if (ss) ss.toast("❌ Impossible d'ouvrir le Formulaire. Vérifiez l'ID d'édition (" + formId + ").", "NUMERICOACH", 7);
-      return;
-    }
-
-    const items = form.getItems();
-    const targetItems: (GoogleAppsScript.Forms.ListItem | GoogleAppsScript.Forms.MultipleChoiceItem)[] = [];
-
-    for (let i = 0; i < items.length; i++) {
-      const title = items[i].getTitle().toLowerCase();
-      const type = items[i].getType();
-      if (type === FormApp.ItemType.LIST || type === FormApp.ItemType.MULTIPLE_CHOICE) {
-        if (
-          title.indexOf("inscription") > -1 ||
-          title.indexOf("session") > -1 ||
-          title.indexOf("formation") > -1 ||
-          title.indexOf("créneau") > -1 ||
-          title.indexOf("creneau") > -1 ||
-          title.indexOf("choix") > -1 ||
-          title.indexOf("date") > -1
-        ) {
-          if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
-          else targetItems.push(items[i].asMultipleChoiceItem());
-        }
-      }
-    }
-
-    // Fallback: si aucun item ciblé par mot-clé, prendre tous les éléments LIST / MULTIPLE_CHOICE du formulaire
-    if (targetItems.length === 0) {
-      for (let i = 0; i < items.length; i++) {
-        const type = items[i].getType();
-        if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
-        else if (type === FormApp.ItemType.MULTIPLE_CHOICE) targetItems.push(items[i].asMultipleChoiceItem());
-      }
-    }
-
-    if (targetItems.length === 0) {
-      Logger.log("Aucun élément de type Liste déroulante ou Choix multiple trouvé dans le formulaire.");
-      if (ss) ss.toast("❌ Aucune question de choix trouvée dans le Google Form.", "NUMERICOACH", 6);
-      return;
-    }
+    const formsToUpdate = [
+      { id: mainFormId, type: "MAIN" },
+      { id: waitingFormId, type: "WAITING" },
+      { id: unsubFormId, type: "UNSUB" }
+    ];
 
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return;
@@ -68,7 +31,9 @@ function updateFormChoices(): void {
 
     // Lecture depuis la colonne A (1) jusqu'à la colonne 20 (Col P) pour éviter tout décalage
     const values = sheetSessions.getRange(2, 1, lastRow - 1, 20).getValues();
-    const choices: string[] = [];
+    
+    const choicesAvailable: string[] = [];
+    const choicesFull: string[] = [];
     const addedSessionIds: string[] = [];
 
     values.forEach(function(row) {
@@ -108,7 +73,7 @@ function updateFormChoices(): void {
 
       const hasSeats = remainingSeats > 0;
 
-      if (sessionId && isPublished && hasSeats) {
+      if (sessionId && isPublished) {
         const dateStr = formatDateClean(dateVal);
         const heureDebutStr = formatTimeClean(heureDebutVal);
         const heureFinStr = formatTimeClean(heureFinVal);
@@ -139,35 +104,83 @@ function updateFormChoices(): void {
         }
         label += " [" + sessionId + "]";
 
-        choices.push(label);
-        addedSessionIds.push(sessionId);
+        choicesFull.push(label);
+        
+        if (hasSeats) {
+          choicesAvailable.push(label);
+          addedSessionIds.push(sessionId);
+        }
       }
     });
 
-    if (choices.length > 0) {
-      targetItems.forEach(item => {
-        if (item.getType() === FormApp.ItemType.LIST) {
-          (item as GoogleAppsScript.Forms.ListItem).setChoiceValues(choices);
-        } else if (item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-          (item as GoogleAppsScript.Forms.MultipleChoiceItem).setChoiceValues(choices);
+    let totalUpdated = 0;
+
+    formsToUpdate.forEach(formInfo => {
+      try {
+        if (!formInfo.id) return;
+        const form = FormApp.openById(formInfo.id);
+        const items = form.getItems();
+        const targetItems: (GoogleAppsScript.Forms.ListItem | GoogleAppsScript.Forms.MultipleChoiceItem)[] = [];
+
+        for (let i = 0; i < items.length; i++) {
+          const title = items[i].getTitle().toLowerCase();
+          const type = items[i].getType();
+          if (type === FormApp.ItemType.LIST || type === FormApp.ItemType.MULTIPLE_CHOICE) {
+            if (
+              title.indexOf("inscription") > -1 ||
+              title.indexOf("session") > -1 ||
+              title.indexOf("formation") > -1 ||
+              title.indexOf("créneau") > -1 ||
+              title.indexOf("creneau") > -1 ||
+              title.indexOf("choix") > -1 ||
+              title.indexOf("date") > -1
+            ) {
+              if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
+              else targetItems.push(items[i].asMultipleChoiceItem());
+            }
+          }
         }
-      });
-      Logger.log("Formulaire mis à jour avec " + choices.length + " sessions : " + addedSessionIds.join(", "));
-      if (ss) ss.toast("✅ Formulaire mis à jour avec " + choices.length + " session(s) (" + addedSessionIds.join(", ") + ")", "NUMERICOACH", 5);
-    } else {
-      const defaultMsg = ["Aucune session disponible pour le moment"];
-      targetItems.forEach(item => {
-        if (item.getType() === FormApp.ItemType.LIST) {
-          (item as GoogleAppsScript.Forms.ListItem).setChoiceValues(defaultMsg);
-        } else if (item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
-          (item as GoogleAppsScript.Forms.MultipleChoiceItem).setChoiceValues(defaultMsg);
+
+        // Fallback
+        if (targetItems.length === 0) {
+          for (let i = 0; i < items.length; i++) {
+            const type = items[i].getType();
+            if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
+            else if (type === FormApp.ItemType.MULTIPLE_CHOICE) targetItems.push(items[i].asMultipleChoiceItem());
+          }
         }
-      });
-      Logger.log("Aucune session disponible.");
-      if (ss) ss.toast("⚠️ Aucune session disponible. Formulaire réinitialisé.", "NUMERICOACH", 5);
-    }
+
+        const choicesToApply = (formInfo.type === "MAIN") ? choicesAvailable : choicesFull;
+
+        if (choicesToApply.length > 0) {
+          targetItems.forEach(item => {
+            if (item.getType() === FormApp.ItemType.LIST) {
+              (item as GoogleAppsScript.Forms.ListItem).setChoiceValues(choicesToApply);
+            } else if (item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
+              (item as GoogleAppsScript.Forms.MultipleChoiceItem).setChoiceValues(choicesToApply);
+            }
+          });
+          totalUpdated++;
+        } else {
+          const defaultMsg = ["Aucune session disponible pour le moment"];
+          targetItems.forEach(item => {
+            if (item.getType() === FormApp.ItemType.LIST) {
+              (item as GoogleAppsScript.Forms.ListItem).setChoiceValues(defaultMsg);
+            } else if (item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
+              (item as GoogleAppsScript.Forms.MultipleChoiceItem).setChoiceValues(defaultMsg);
+            }
+          });
+        }
+      } catch (err) {
+        Logger.log("Erreur maj formulaire " + formInfo.type + " : " + err);
+      }
+    });
+
+    Logger.log("Formulaires mis à jour avec succès : " + totalUpdated);
+    if (ss) ss.toast("✅ " + totalUpdated + " formulaire(s) mis à jour avec les sessions.", "NUMERICOACH", 5);
+
   } catch (err) {
-    Logger.log("Erreur dans updateFormChoices : " + err);
+    Logger.log("Erreur globale dans updateFormChoices : " + err);
     if (ss) ss.toast("❌ Erreur lors de la mise à jour : " + err, "NUMERICOACH", 7);
   }
 }

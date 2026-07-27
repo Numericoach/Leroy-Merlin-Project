@@ -3,14 +3,39 @@
  * Protégé par LockService contre les soumissions simultanées
  */
 function onSubmit(e?: any): void {
-  const lock = LockService.getScriptLock();
-  const hasLock = lock.tryLock(10000);
-  if (!hasLock) {
-    Logger.log("Impossible d'acquérir le verrou. Soumission reportée ou ignorée.");
-    return;
-  }
+  let lock: GoogleAppsScript.Lock.Lock | null = null;
+  let hasLock = false;
 
   try {
+    try {
+      lock = LockService.getScriptLock();
+      hasLock = lock.tryLock(10000);
+    } catch (lockErr) {
+      Logger.log("Avertissement LockService : " + lockErr);
+    }
+
+    // 1. DÉTECTER SI C'EST LA LISTE D'ATTENTE OU LA DÉSINSCRIPTION
+    const sheetName = e && e.range ? e.range.getSheet().getName().toUpperCase() : "";
+
+    if (sheetName.indexOf("ATTENTE") > -1) {
+      Logger.log("Soumission enregistrée dans la liste d'attente : " + sheetName);
+      if (ss) ss.toast("📥 Inscription sur la liste d'attente enregistrée !", "LISTE D'ATTENTE", 5);
+      return;
+    }
+
+    if (sheetName.indexOf("DESINSCRIPTION") > -1) {
+      if (ss) ss.toast("Désinscription détectée. Extraction de la session...", "DÉBOGAGE", 5);
+      const data = extractSubmissionData(e);
+      if (data.thisSessionid) {
+        if (ss) ss.toast("Place libérée pour la session : " + data.thisSessionid + ". Recherche dans la file d'attente...", "DÉBOGAGE", 5);
+        Logger.log("Désinscription détectée pour la session " + data.thisSessionid);
+        processWaitingList(data.thisSessionid);
+      } else {
+        if (ss) ss.toast("❌ Impossible de trouver l'ID de session dans la désinscription.", "DÉBOGAGE", 8);
+      }
+      return;
+    }
+
     const data = extractSubmissionData(e);
     
     if (!data.thisSessionid || !data.thisEmail) {
@@ -62,12 +87,13 @@ function onSubmit(e?: any): void {
 
     if (!sessionFound) {
       Logger.log("Avertissement : ID Session " + data.thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
-      remainingSeatsAfterForm = 0;
+      remainingSeatsAfterForm = 999; // Défaut permissif pour ne pas bloquer l'inscription
     }
 
-    // Si remainingSeatsAfterForm < 0, cela signifie que la session est déjà complète !
-    if (remainingSeatsAfterForm < 0) {
+    // Si remainingSeatsAfterForm <= 0, cela signifie que la session est complète !
+    if (remainingSeatsAfterForm <= 0) {
       Logger.log("Inscription refusée : session complète pour " + data.thisSessionid);
+      if (ss) ss.toast("⚠️ Session " + data.thisSessionid + " complète ! Redirection vers la liste d'attente...", "INFO", 6);
       
       // SUPPRIMER LA LIGNE EN TROP DE INSCRIPTIONSS POUR CONSERVER UN COMPTEUR PROPRE
       if (e && e.range) {
@@ -98,27 +124,36 @@ function onSubmit(e?: any): void {
     
     if (verif.length > 0) {
       Logger.log("Déjà inscrit : " + data.thisEmail + " à " + data.thisSessionid);
+      if (ss) ss.toast("ℹ️ Vous êtes déjà inscrit à la session " + data.thisSessionid + ". Pas de nouveau mail envoyé.", "INFO", 7);
       return;
     }
 
     // 4. INSCRIPTION DANS LE SHEETS AVEC L'HORODATEUR EXACT DU FORMULAIRE
     inscription(data.thisTime, data.thisSessionid, data.thisEmail, data.thisNbParticipants);
 
-    // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA (Priorité absolue)
-    addParticipantToCalendar(data.thisSessionid, data.thisEmail);
+    // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA
+    try {
+      addParticipantToCalendar(data.thisSessionid, data.thisEmail);
+    } catch (agendaErr) {
+      Logger.log("Avertissement : échec de l'ajout à l'agenda : " + agendaErr);
+    }
 
-    // 6. FONCTION SECONDAIRE : ENVOI DE LA CONVOCATION / CONFIRMATION (Découplé)
+    // 6. ENVOI DE LA CONVOCATION / CONFIRMATION
     try {
       sendConfirmationMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom, data.thisCivilite, data.thisNbParticipants);
+      if (ss) ss.toast("✅ Inscription validée ! Convocation envoyée à " + data.thisEmail, "SUCCÈS", 7);
     } catch (mailErr) {
-      Logger.log("Avertissement : échec de l'envoi d'e-mail (n'impacte pas l'inscription ni l'agenda) : " + mailErr);
+      Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
+      if (ss) ss.toast("⚠️ Inscription enregistrée mais échec d'envoi du mail : " + mailErr, "AVERTISSEMENT", 7);
     }
     
   } catch (err) {
     Logger.log("Erreur critique dans onSubmit : " + err);
   } finally {
-    if (hasLock) {
-      lock.releaseLock();
+    if (hasLock && lock) {
+      try {
+        lock.releaseLock();
+      } catch (relErr) {}
     }
   }
 }
@@ -230,13 +265,13 @@ function extractSubmissionData(e: any): any {
   }
 
   let thisSessionid = "";
-  const matchBracket = thisSession.match(/\[(.*?)\]/);
-  if (matchBracket && matchBracket[1]) {
-    thisSessionid = matchBracket[1].trim();
+  const matchSes = thisSession.match(/(SES-[\w-]+)/i);
+  if (matchSes && matchSes[1]) {
+    thisSessionid = matchSes[1].trim().toUpperCase();
   } else {
-    const matchSes = thisSession.match(/(SES-\d+)/i);
-    if (matchSes && matchSes[1]) {
-      thisSessionid = matchSes[1].trim();
+    const matchBracket = thisSession.match(/\[(.*?)\]/);
+    if (matchBracket && matchBracket[1]) {
+      thisSessionid = matchBracket[1].trim();
     } else {
       thisSessionid = thisSession.trim();
     }
@@ -252,4 +287,165 @@ function extractSubmissionData(e: any): any {
     thisNom,
     thisNbParticipants
   };
+}
+
+/**
+ * Vérifie la file d'attente pour une session donnée et notifie la première personne.
+ */
+function processWaitingList(sessionId: string): void {
+  let sheetAttente = ss ? (ss.getSheetByName("INSCRIPTIONS FILE ATTENTE") || ss.getSheetByName("FILE ATTENTE")) : null;
+  
+  if (!sheetAttente && ss) {
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      const name = sheets[i].getName().toUpperCase();
+      if (name.indexOf("ATTENTE") > -1) {
+        sheetAttente = sheets[i];
+        break;
+      }
+    }
+  }
+
+  if (!sheetAttente) {
+    if (ss) ss.toast("❌ Onglet Liste d'attente introuvable !", "DÉBOGAGE", 8);
+    return;
+  }
+
+  const lastRow = sheetAttente.getLastRow();
+  if (lastRow < 2) {
+    if (ss) ss.toast("File d'attente vide pour l'instant.", "DÉBOGAGE", 5);
+    return;
+  }
+
+  const data = sheetAttente.getRange(2, 1, lastRow - 1, 15).getValues(); // Lire 15 colonnes max
+  let personNotified = false;
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    
+    let isSessionMatch = false;
+    let isNotified = false;
+    let email = "";
+    
+    for (let c = 0; c < row.length; c++) {
+      const val = (row[c] || "").toString().trim();
+      if (val.indexOf(sessionId) > -1) isSessionMatch = true;
+      if (val.indexOf("@") > -1 && val.indexOf(".") > -1 && !email) email = val;
+      if (val.indexOf("Notifié") > -1 || val.indexOf("Inscrit") > -1) isNotified = true;
+    }
+
+    if (isSessionMatch && !isNotified && email) {
+      const prenom = (row[2] || "").toString();
+      const nom = (row[3] || "").toString();
+
+      Logger.log("Place libérée ! Inscription automatique de " + email + " pour la session " + sessionId);
+      if (ss) ss.toast("🚀 Promotion automatique de " + email + " pour la session " + sessionId + "...", "TRAITEMENT", 5);
+
+      // 1. INSCRIPTION AUTOMATIQUE DANS L'ONGLET INSCRIPTIONS
+      try {
+        inscription(new Date(), sessionId, email, 1);
+      } catch (inscErr) {
+        Logger.log("Erreur lors de l'inscription automatique : " + inscErr);
+      }
+
+      // 2. AJOUT À L'AGENDA GOOGLE
+      try {
+        addParticipantToCalendar(sessionId, email);
+      } catch (agendaErr) {
+        Logger.log("Erreur ajout agenda automatique : " + agendaErr);
+      }
+
+      // 3. ENVOI DE L'E-MAIL DE CONFIRMATION ET CONVOCATION PDF
+      try {
+        sendConfirmationMail(sessionId, email, prenom, nom);
+        if (ss) ss.toast("✅ " + email + " inscrit automatiquement & convocation envoyée !", "SUCCÈS", 8);
+      } catch (err) {
+        Logger.log("Erreur envoi mail confirmation : " + err);
+        // Fallback si la convocation échoue : envoi du mail simple de place disponible
+        try {
+          sendSpotAvailableMail(sessionId, email, prenom, nom);
+          if (ss) ss.toast("✅ Mail d'information envoyé à " + email, "SUCCÈS", 8);
+        } catch (subErr) {
+          if (ss) ss.toast("❌ Erreur d'envoi de mail à " + email + " : " + subErr, "ERREUR", 8);
+        }
+      }
+      
+      // Marquer comme inscrit automatiquement dans la première colonne vide
+      let writeCol = 6;
+      for (let c = 0; c < row.length; c++) {
+         if ((row[c] || "").toString().trim() === "") {
+            writeCol = c + 1;
+            break;
+         }
+      }
+      
+      const timeStr = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm:ss");
+      sheetAttente.getRange(i + 2, writeCol).setValue("Inscrit automatiquement le " + timeStr);
+      personNotified = true;
+      break; // Une seule personne promue par désinscription
+    }
+  }
+
+  if (!personNotified && ss) {
+    ss.toast("Aucun candidat en attente non-notifié trouvé pour " + sessionId, "DÉBOGAGE", 5);
+  }
+}
+
+/**
+ * Rattrapage manuel : scanne l'onglet INSCRIPTIONSS et traite les inscriptions qui ne sont pas encore dans INSCRIPTIONS.
+ */
+function processUnprocessedInscriptions(): void {
+  const sheetFormResps = ss ? (ss.getSheetByName("INSCRIPTIONSS") || ss.getSheetByName("INSCRIPTIONS FORM")) : null;
+  if (!sheetFormResps || !sheetInscriptions) {
+    if (ss) ss.toast("❌ Onglets d'inscriptions introuvables.", "NUMERICOACH", 6);
+    return;
+  }
+
+  const lastRow = sheetFormResps.getLastRow();
+  if (lastRow < 2) {
+    if (ss) ss.toast("Aucune réponse dans l'onglet des formulaires.", "NUMERICOACH", 5);
+    return;
+  }
+
+  const data = sheetFormResps.getRange(2, 1, lastRow - 1, 10).getValues();
+  let countProcessed = 0;
+
+  data.forEach(row => {
+    const time = row[0] || new Date();
+    const email = (row[1] || "").toString().trim();
+    const prenom = (row[2] || "").toString().trim();
+    const nom = (row[3] || "").toString().trim();
+    const rawSession = (row[5] || "").toString().trim();
+
+    if (!email || !rawSession) return;
+
+    let sessionId = "";
+    const matchSes = rawSession.match(/(SES-[\w-]+)/i);
+    if (matchSes && matchSes[1]) {
+      sessionId = matchSes[1].trim().toUpperCase();
+    } else {
+      sessionId = rawSession;
+    }
+
+    // Vérifier si déjà dans INSCRIPTIONS
+    const maxRows = sheetInscriptions.getMaxRows();
+    let isAlreadyIn = false;
+    if (maxRows > 1) {
+      const existing = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
+      isAlreadyIn = existing.some(r => r[0] === sessionId && r[1] === email);
+    }
+
+    if (!isAlreadyIn) {
+      inscription(time, sessionId, email, 1);
+      try {
+        addParticipantToCalendar(sessionId, email);
+      } catch (e) {}
+      try {
+        sendConfirmationMail(sessionId, email, prenom, nom);
+      } catch (e) {}
+      countProcessed++;
+    }
+  });
+
+  if (ss) ss.toast("✅ " + countProcessed + " inscription(s) rattrapée(s) et traitée(s) !", "NUMERICOACH", 6);
 }

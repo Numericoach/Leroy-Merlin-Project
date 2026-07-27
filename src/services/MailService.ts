@@ -14,7 +14,7 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
   const customEmailEntry = getParamValue("PARAMETRE_ENTRY_EMAIL");
   if (customEmailEntry) entryEmailId = customEmailEntry;
 
-  const listeAttenteLink = "https://sites.google.com/numericoach.fr/testleroymerlin/liste-attente";
+  const listeAttenteLink = "https://sites.google.com/ext.leroymerlin.fr/inscriptionenligne/liste-attente";
 
   const subject = "Session complète - Option Liste d'Attente - Formation Leroy Merlin [" + sessionId + "]";
   
@@ -50,6 +50,53 @@ function sendWaitingListMail(sessionId: string, email: string, prenom?: string, 
     MailApp.sendEmail(mailOptions);
   }
   Logger.log("Mail de liste d'attente envoyé à " + email + " pour la session " + sessionId);
+}
+
+/**
+ * Envoi d'un e-mail lorsqu'une place se libère suite à une désinscription.
+ */
+function sendSpotAvailableMail(sessionId: string, email: string, prenom?: string, nom?: string): void {
+  const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
+  const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
+  
+  let siteUrl = getParamValue("PARAMETRE_URL_SITE_INSCRIPTION");
+  if (!siteUrl || siteUrl.trim() === "") {
+    siteUrl = "https://sites.google.com/ext.leroymerlin.fr/inscriptionenligne";
+  }
+
+  const subject = "Place libérée ! Inscrivez-vous vite - Formation Leroy Merlin [" + sessionId + "]";
+  
+  let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
+    + "<div style='background-color: #00B140; padding: 20px; text-align: center; color: white;'>"
+    + "<h2 style='margin: 0; font-weight: bold;'>🎉 Une place s'est libérée !</h2>"
+    + "</div>"
+    + "<div style='padding: 24px;'>"
+    + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
+    + "<p>Bonne nouvelle ! Suite à un désistement, <b>une place vient de se libérer</b> pour la session de formation <b>[" + sessionId + "]</b> que vous attendiez.</p>"
+    + "<p style='color: #00B140;'><b>Attention, premier arrivé, premier servi !</b></p>"
+    + "<p>Ne tardez pas, cliquez sur le bouton ci-dessous pour retourner sur le catalogue et valider votre inscription définitive :</p>"
+    + "<p style='text-align: center; margin: 25px 0;'><a href='" + siteUrl + "' style='display:inline-block; background-color:#00B140; color:white; padding:12px 22px; text-decoration:none; border-radius:5px; font-weight:bold;'>M'inscrire à la formation</a></p>"
+    + "</div></div>";
+
+  const mailOptions: any = {
+    to: email,
+    subject: subject,
+    htmlBody: htmlBody,
+    name: senderName
+  };
+
+  if (senderEmail && senderEmail.length > 3) {
+    mailOptions.from = senderEmail;
+    mailOptions.replyTo = senderEmail;
+  }
+
+  try {
+    MailApp.sendEmail(mailOptions);
+  } catch (err) {
+    Logger.log("Avertissement expéditeur personnalisé : " + err + ". Tentative d'envoi avec l'expéditeur par défaut...");
+    delete mailOptions.from;
+    MailApp.sendEmail(mailOptions);
+  }
 }
 
 /**

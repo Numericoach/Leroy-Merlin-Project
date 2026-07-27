@@ -1,14 +1,7 @@
 // Configuration globale et variables réutilisables
 function getActiveSpreadsheetRobust(): GoogleAppsScript.Spreadsheet.Spreadsheet | null {
   if (typeof SpreadsheetApp === 'undefined') return null;
-  let s = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.getActive();
-  if (s) return s;
-  
-  try {
-    const files = DriveApp.getFilesByName("LEROY MERLIN - TABLEAU DE BORD - FORMATIONS");
-    if (files.hasNext()) return SpreadsheetApp.openById(files.next().getId());
-  } catch (e) {}
-  return null;
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.getActive();
 }
 
 const ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null = getActiveSpreadsheetRobust();
@@ -76,7 +69,8 @@ function onOpen(): void {
   ui.createMenu('NUMERICOACH')
     .addItem('Tester la génération de PDF', 'testPDFGeneration')
     .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
-    .addItem('Installer les déclencheurs (Triggers)', 'setupTriggers')
+    .addItem('Installer / Réinitialiser les déclencheurs (Triggers)', 'setupTriggers')
+    .addItem('Retraiter les inscriptions non traitées', 'processUnprocessedInscriptions')
     .addToUi();
 }
 

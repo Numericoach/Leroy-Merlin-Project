@@ -49,6 +49,9 @@ allFiles.forEach(srcPath => {
     code = code.replace(/Object\.defineProperty\(exports,\s*"__esModule",\s*\{\s*value:\s*true\s*\}\);?/g, '');
     code = code.replace(/exports\.[a-zA-Z0-9_]+\s*=\s*/g, '');
     code = code.replace(/^export\s+/gm, '');
+    code = code.replace(/const\s+[a-zA-Z0-9_]+\s*=\s*require\(.*?\);?/g, '');
+    code = code.replace(/var\s+[a-zA-Z0-9_]+\s*=\s*require\(.*?\);?/g, '');
+    code = code.replace(/let\s+[a-zA-Z0-9_]+\s*=\s*require\(.*?\);?/g, '');
 
     fs.writeFileSync(distJsPath, code);
     console.log(`Compiled ${srcPath} -> dist/${fileBasename.replace(/\.ts$/, '.js')}`);
