@@ -468,6 +468,9 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
+    const countTag = totalParticipants > 0 ? " (" + totalParticipants + " inscrit" + (totalParticipants > 1 ? "s" : "") + ")" : "";
+    cleanTitle = cleanTitle + countTag;
+
     const meetUrl = getMeetUrlForSession(sessionId);
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 

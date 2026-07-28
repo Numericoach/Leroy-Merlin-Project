@@ -16,6 +16,15 @@ function onSubmit(e?: any): void {
 
     // 1. DÉTECTER SI C'EST LA LISTE D'ATTENTE OU LA DÉSINSCRIPTION
     const sheetName = e && e.range ? e.range.getSheet().getName().toUpperCase() : "";
+    let isDesinscription = sheetName.indexOf("DESINSCRIPTION") > -1 || sheetName.indexOf("DÉSINSCRIPTION") > -1;
+
+    if (!isDesinscription && e && e.range) {
+      try {
+        const sh = e.range.getSheet();
+        const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map((h: any) => (h || "").toString().toLowerCase());
+        isDesinscription = headers.some((h: string) => h.indexOf("désinscription") > -1 || h.indexOf("desinscription") > -1 || h.indexOf("désinscrire") > -1);
+      } catch (err) {}
+    }
 
     if (sheetName.indexOf("ATTENTE") > -1) {
       Logger.log("Soumission enregistrée dans la liste d'attente : " + sheetName);
@@ -23,8 +32,8 @@ function onSubmit(e?: any): void {
       return;
     }
 
-    if (sheetName.indexOf("DESINSCRIPTION") > -1) {
-      if (ss) ss.toast("Désinscription détectée. Extraction de la session...", "DÉBOGAGE", 5);
+    if (isDesinscription) {
+      if (ss) ss.toast("🚪 Désinscription détectée. Retrait du participant et mise à jour de l'agenda...", "DÉSINSCRIPTION", 5);
       const data = extractSubmissionData(e);
       if (data.thisSessionid && data.thisEmail) {
         // 1. Supprimer de la feuille INSCRIPTIONS
@@ -43,25 +52,18 @@ function onSubmit(e?: any): void {
           }
         }
 
-        // 2. Retirer de Google Agenda
+        // 2. Retirer de Google Agenda (removeGuest) et rafraîchir la description et le titre (nb d'inscrits)
         try {
           removeParticipantFromCalendar(data.thisSessionid, data.thisEmail);
         } catch (agendaErr) {
           Logger.log("Avertissement retrait agenda : " + agendaErr);
         }
 
-        // 3. Mettre à jour le titre et la description de l'événement Agenda
-        try {
-          updateEventAttendeeListAndDescription(data.thisSessionid);
-        } catch (updateErr) {
-          Logger.log("Erreur mise à jour après désinscription : " + updateErr);
-        }
-
-        if (ss) ss.toast("Place libérée pour la session : " + data.thisSessionid + ". Recherche dans la file d'attente...", "DÉBOGAGE", 5);
-        Logger.log("Désinscription détectée pour la session " + data.thisSessionid);
+        if (ss) ss.toast("✅ Participant " + data.thisEmail + " retiré de l'agenda pour la session " + data.thisSessionid, "SUCCÈS", 6);
+        Logger.log("Désinscription traitée pour la session " + data.thisSessionid);
         processWaitingList(data.thisSessionid);
       } else {
-        if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "DÉBOGAGE", 8);
+        if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "AVERTISSEMENT", 8);
       }
       return;
     }
