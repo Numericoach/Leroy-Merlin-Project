@@ -67,11 +67,11 @@ function getParamValue(paramKey: string): string {
       paramCache.set(paramKey, val);
       return val;
     }
-    if (paramKey === "PARAMETRE_ID_FORMS_EDIT_WAITING" && (noAccentRaw.indexOf("edit liste d'attente") > -1 || noAccentRaw.indexOf("edit attente") > -1)) {
+    if (paramKey === "PARAMETRE_ID_FORMS_EDIT_WAITING" && (noAccentRaw.indexOf("attente") > -1 && noAccentRaw.indexOf("edit") > -1)) {
       paramCache.set(paramKey, val);
       return val;
     }
-    if (paramKey === "PARAMETRE_ID_FORMS_EDIT_UNSUB" && (noAccentRaw.indexOf("edit desinscription") > -1 || noAccentRaw.indexOf("edit desinscrire") > -1)) {
+    if (paramKey === "PARAMETRE_ID_FORMS_EDIT_UNSUB" && (noAccentRaw.indexOf("desinscri") > -1 && noAccentRaw.indexOf("edit") > -1)) {
       paramCache.set(paramKey, val);
       return val;
     }
