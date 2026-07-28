@@ -544,7 +544,7 @@ function createEventSession(): void {
   const lastRow = sheetSessions.getLastRow();
   if (lastRow < 2) return;
 
-  if (ss) ss.toast("📅 Synchronisation/Pré-réservation des événements Google Agenda...", "NUMERICOACH", 5);
+  if (ss) ss.toast("📅 Synchronisation/Pré-réservation des événements Google Agenda...", "OUTILS", 5);
 
   let count = 0;
   const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 1).getValues();
@@ -556,7 +556,7 @@ function createEventSession(): void {
     }
   });
 
-  if (ss) ss.toast("✅ " + count + " événement(s) de session synchronisé(s) et réservé(s) dans Google Agenda !", "NUMERICOACH", 7);
+  if (ss) ss.toast("✅ " + count + " événement(s) de session synchronisé(s) et réservé(s) dans Google Agenda !", "OUTILS", 7);
 }
 
 /**
@@ -614,13 +614,13 @@ function checkGuests(): void {
  */
 function testAgendaIntegration(): void {
   const userEmail = Session.getActiveUser().getEmail() || "test@example.com";
-  if (ss) ss.toast("📅 Début du test Google Agenda...", "NUMERICOACH", 5);
+  if (ss) ss.toast("📅 Début du test Google Agenda...", "OUTILS", 5);
 
   try {
     // 1. Vérifier l'accès à l'agenda cible
     const agenda = getTargetCalendar();
     if (!agenda) {
-      if (ss) ss.toast("❌ Aucun agenda disponible ! Vérifiez l'ID dans PARAMETRES ou les autorisations.", "NUMERICOACH", 8);
+      if (ss) ss.toast("❌ Aucun agenda disponible ! Vérifiez l'ID dans PARAMETRES ou les autorisations.", "OUTILS", 8);
       Logger.log("Test Agenda échec : getTargetCalendar() a retourné null.");
       return;
     }
@@ -628,7 +628,7 @@ function testAgendaIntegration(): void {
     const calName = agenda.getName();
     const calId = agenda.getId();
     Logger.log("Agenda cible détecté : " + calName + " (ID: " + calId + ")");
-    if (ss) ss.toast("✅ Agenda détecté : " + calName, "NUMERICOACH", 5);
+    if (ss) ss.toast("✅ Agenda détecté : " + calName, "OUTILS", 5);
 
     // 2. Chercher une session réelle dans l'onglet SESSIONS
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
@@ -649,30 +649,30 @@ function testAgendaIntegration(): void {
     }
 
     Logger.log("Session de test sélectionnée : " + testSessionId);
-    if (ss) ss.toast("🔄 Test de création/récupération d'événement pour " + testSessionId + "...", "NUMERICOACH", 5);
+    if (ss) ss.toast("🔄 Test de création/récupération d'événement pour " + testSessionId + "...", "OUTILS", 5);
 
     // 3. Obtenir ou créer l'événement pour cette session
     const eventId = getOrCreateSessionEventId(testSessionId);
     if (!eventId) {
-      if (ss) ss.toast("❌ Échec de la création/récupération de l'événement pour " + testSessionId, "NUMERICOACH", 8);
+      if (ss) ss.toast("❌ Échec de la création/récupération de l'événement pour " + testSessionId, "OUTILS", 8);
       return;
     }
 
     Logger.log("Événement Agenda obtenu : " + eventId);
 
     // 4. Test d'ajout d'invité
-    if (ss) ss.toast("👤 Test d'ajout d'invité : " + userEmail + "...", "NUMERICOACH", 5);
+    if (ss) ss.toast("👤 Test d'ajout d'invité : " + userEmail + "...", "OUTILS", 5);
     const added = addParticipantToCalendar(testSessionId, userEmail);
 
     if (added) {
-      if (ss) ss.toast("✅ Succès ! Événement et invité (" + userEmail + ") synchronisés dans Google Agenda (" + calName + ") !", "NUMERICOACH", 8);
+      if (ss) ss.toast("✅ Succès ! Événement et invité (" + userEmail + ") synchronisés dans Google Agenda (" + calName + ") !", "OUTILS", 8);
       Logger.log("Test Agenda RÉUSSI avec succès pour " + userEmail + " sur " + testSessionId);
     } else {
-      if (ss) ss.toast("⚠️ Événement trouvé mais échec lors de l'ajout de l'invité. Consultez les journaux.", "NUMERICOACH", 8);
+      if (ss) ss.toast("⚠️ Événement trouvé mais échec lors de l'ajout de l'invité. Consultez les journaux.", "OUTILS", 8);
     }
 
   } catch (err: any) {
     Logger.log("Erreur dans testAgendaIntegration : " + err);
-    if (ss) ss.toast("❌ Erreur Agenda : " + err.toString(), "NUMERICOACH", 8);
+    if (ss) ss.toast("❌ Erreur Agenda : " + err.toString(), "OUTILS", 8);
   }
 }

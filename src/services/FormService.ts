@@ -31,7 +31,7 @@ function updateFormChoices(): void {
 
     if (!mainFormId) {
       Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
-      if (ss) ss.toast("❌ ID Formulaire d'édition non trouvé.", "NUMERICOACH", 6);
+      if (ss) ss.toast("❌ ID Formulaire d'édition non trouvé.", "OUTILS", 6);
       return;
     }
 
@@ -208,10 +208,10 @@ function updateFormChoices(): void {
     });
 
     Logger.log("Formulaires mis à jour avec succès : " + totalUpdated);
-    if (ss) ss.toast("✅ " + totalUpdated + " formulaire(s) mis à jour avec les sessions.", "NUMERICOACH", 5);
+    if (ss) ss.toast("✅ " + totalUpdated + " formulaire(s) mis à jour avec les sessions.", "OUTILS", 5);
 
   } catch (err) {
     Logger.log("Erreur globale dans updateFormChoices : " + err);
-    if (ss) ss.toast("❌ Erreur lors de la mise à jour : " + err, "NUMERICOACH", 7);
+    if (ss) ss.toast("❌ Erreur lors de la mise à jour : " + err, "OUTILS", 7);
   }
 }

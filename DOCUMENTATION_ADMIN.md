@@ -172,9 +172,9 @@ L'application Web affiche les cartes de formations en direct :
 
 ---
 
-## 6. Guide d'Utilisation du Menu Administrateur NUMERICOACH
+## 6. Guide d'Utilisation du Menu Administrateur OUTILS
 
-Dans la barre supérieure de votre classeur Google Sheets, vous disposez du menu **NUMERICOACH** :
+Dans la barre supérieure de votre classeur Google Sheets, vous disposez du menu **OUTILS** :
 
 1. **`Mettre à jour les sessions dans le Formulaire`** :  
    À exécuter après la saisie de nouvelles sessions pour forcer la synchronisation immédiate des 3 formulaires.

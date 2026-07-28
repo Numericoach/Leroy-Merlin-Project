@@ -126,7 +126,7 @@ function generateConvocationPdf(
  */
 function testPDFGeneration(): void {
   const activeUserEmail = Session.getActiveUser().getEmail() || "test@example.com";
-  if (ss) ss.toast("🛠️ Génération d'un PDF de test en cours...", "NUMERICOACH", 5);
+  if (ss) ss.toast("🛠️ Génération d'un PDF de test en cours...", "OUTILS", 5);
 
   try {
     const result = generateConvocationPdf(
@@ -150,13 +150,13 @@ function testPDFGeneration(): void {
     );
 
     if (result.pdfUrl) {
-      if (ss) ss.toast("✅ PDF de test généré avec succès ! Lien dans le journal.", "NUMERICOACH", 7);
+      if (ss) ss.toast("✅ PDF de test généré avec succès ! Lien dans le journal.", "OUTILS", 7);
       Logger.log("PDF de test créé avec succès : " + result.pdfUrl);
     } else {
-      if (ss) ss.toast("❌ Échec de génération du PDF. Vérifiez l'ID du modèle dans PARAMETRES.", "NUMERICOACH", 7);
+      if (ss) ss.toast("❌ Échec de génération du PDF. Vérifiez l'ID du modèle dans PARAMETRES.", "OUTILS", 7);
     }
   } catch (err) {
     Logger.log("Erreur dans testPDFGeneration : " + err);
-    if (ss) ss.toast("❌ Erreur : " + err, "NUMERICOACH", 7);
+    if (ss) ss.toast("❌ Erreur : " + err, "OUTILS", 7);
   }
 }

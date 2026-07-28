@@ -5,7 +5,7 @@ function createGoogleDocsDocumentation(): void {
   const ui = (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getUi) ? SpreadsheetApp.getUi() : null;
   
   try {
-    if (ss) ss.toast("⏳ Génération des documentations Google Docs dans votre Google Drive...", "NUMERICOACH", 10);
+    if (ss) ss.toast("⏳ Génération des documentations Google Docs dans votre Google Drive...", "OUTILS", 10);
 
     // -------------------------------------------------------------
     // 1. Création de la Documentation Administrateur

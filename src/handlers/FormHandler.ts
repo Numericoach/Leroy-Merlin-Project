@@ -444,13 +444,13 @@ function processWaitingList(sessionId: string): void {
 function processUnprocessedInscriptions(): void {
   const sheetFormResps = ss ? (ss.getSheetByName("INSCRIPTIONSS") || ss.getSheetByName("INSCRIPTIONS FORM")) : null;
   if (!sheetFormResps || !sheetInscriptions) {
-    if (ss) ss.toast("❌ Onglets d'inscriptions introuvables.", "NUMERICOACH", 6);
+    if (ss) ss.toast("❌ Onglets d'inscriptions introuvables.", "OUTILS", 6);
     return;
   }
 
   const lastRow = sheetFormResps.getLastRow();
   if (lastRow < 2) {
-    if (ss) ss.toast("Aucune réponse dans l'onglet des formulaires.", "NUMERICOACH", 5);
+    if (ss) ss.toast("Aucune réponse dans l'onglet des formulaires.", "OUTILS", 5);
     return;
   }
 
@@ -502,5 +502,5 @@ function processUnprocessedInscriptions(): void {
     }
   });
 
-  if (ss) ss.toast("✅ " + countProcessed + " inscription(s) rattrapée(s) et traitée(s) !", "NUMERICOACH", 6);
+  if (ss) ss.toast("✅ " + countProcessed + " inscription(s) rattrapée(s) et traitée(s) !", "OUTILS", 6);
 }

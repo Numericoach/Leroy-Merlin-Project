@@ -126,7 +126,7 @@ function getParamValue(paramKey: string): string {
  */
 function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('NUMERICOACH')
+  ui.createMenu('OUTILS')
     .addItem('Synchroniser les événements Agenda (Pré-réservation)', 'createEventSession')
     .addItem('Tester la génération de PDF', 'testPDFGeneration')
     .addItem('Tester l\'intégration Google Agenda', 'testAgendaIntegration')
