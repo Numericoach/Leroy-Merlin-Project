@@ -32,7 +32,8 @@ function getParamValue(paramKey: string): string {
   const lastRow = sheetParam.getLastRow();
   if (lastRow < 2) return "";
 
-  const data = sheetParam.getRange(2, 1, lastRow - 1, 2).getValues();
+  // Lire les colonnes B (Clé) et C (Valeur) de l'onglet PARAMETRES
+  const data = sheetParam.getRange(2, 2, lastRow - 1, 2).getValues();
 
   if (!paramCache) {
     paramCache = new Map<string, string>();
