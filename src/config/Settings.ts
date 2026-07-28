@@ -59,6 +59,10 @@ function getParamValue(paramKey: string): string {
     const lowerRaw = rawKey.toLowerCase();
     const noAccentRaw = lowerRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+    if ((paramKey === "PARAMETRE_ID_FORMS_EDIT" || paramKey === "PARAMETRE_ID_EDITION") && (noAccentRaw.indexOf("id form edit") > -1 || noAccentRaw.indexOf("form edit") > -1 || noAccentRaw.indexOf("edit inscription") > -1)) {
+      paramCache.set(paramKey, val);
+      return val;
+    }
     if (paramKey === "PARAMETRE_ID_FORMS_INSCRIPTION" && (noAccentRaw.indexOf("id form edit") > -1 || noAccentRaw.indexOf("forms inscription") > -1)) {
       paramCache.set(paramKey, val);
       return val;

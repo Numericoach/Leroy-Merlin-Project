@@ -3,17 +3,25 @@
  */
 function updateFormChoices(): void {
   try {
-    let rawMainFormId = getParamValue("PARAMETRE_ID_EDITION");
-    if (!rawMainFormId || rawMainFormId.trim() === "") {
+    let rawMainFormId = getParamValue("PARAMETRE_ID_FORMS_EDIT");
+    if (!rawMainFormId || rawMainFormId.trim() === "" || rawMainFormId.indexOf("1FAIpQL") > -1) {
+      rawMainFormId = getParamValue("PARAMETRE_ID_EDITION");
+    }
+    if (!rawMainFormId || rawMainFormId.trim() === "" || rawMainFormId.indexOf("1FAIpQL") > -1) {
       rawMainFormId = getParamValue("PARAMETRE_ID_FORMS_INSCRIPTION");
     }
+    // Hardcoded fallback d'urgence sur l'ID d'Édition officiel si seul le lien de vue publique est présent dans PARAMETRES
+    if (!rawMainFormId || rawMainFormId.indexOf("1FAIpQL") > -1) {
+      rawMainFormId = "1LOsvh4spCORP-xkR8dhTFlYvmXtXRvjNnYkTrmJCbQo";
+    }
+
     const mainFormId = extractFormId(rawMainFormId);
     const waitingFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE"));
     const unsubFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
 
     if (!mainFormId) {
       Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
-      if (ss) ss.toast("❌ ID Formulaire non trouvé dans l'onglet PARAMETRES.", "NUMERICOACH", 6);
+      if (ss) ss.toast("❌ ID Formulaire d'édition non trouvé.", "NUMERICOACH", 6);
       return;
     }
 
