@@ -463,7 +463,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
       const displayName = (prenom || nom) ? (civilite ? civilite + " " : "") + prenom + " " + nom : email;
       const storeName = magasin ? " (" + magasin + ")" : "";
       
-      participantListHtml += "<li><b>" + displayName + "</b>" + storeName + " : " + nbPart + " participant(s) (" + email + ")</li>";
+      participantListHtml += "<li><b>" + displayName + "</b>" + storeName + " : " + nbPart + " participant(s)</li>";
     });
 
     if (participantListHtml === "") {
