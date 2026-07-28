@@ -25,15 +25,30 @@ function getTargetCalendar(): GoogleAppsScript.Calendar.Calendar | null {
 function getEventByIdRobust(eventId: string): GoogleAppsScript.Calendar.CalendarEvent | null {
   if (!eventId) return null;
   let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
-  try {
-    event = CalendarApp.getEventById(eventId);
-  } catch (e) {}
+  const targetCal = getTargetCalendar();
 
-  if (!event && eventId.indexOf("@") === -1) {
+  if (targetCal) {
     try {
-      event = CalendarApp.getEventById(eventId + "@google.com");
+      event = targetCal.getEventById(eventId);
     } catch (e) {}
+    if (!event && eventId.indexOf("@") === -1) {
+      try {
+        event = targetCal.getEventById(eventId + "@google.com");
+      } catch (e) {}
+    }
   }
+
+  if (!event) {
+    try {
+      event = CalendarApp.getEventById(eventId);
+    } catch (e) {}
+    if (!event && eventId.indexOf("@") === -1) {
+      try {
+        event = CalendarApp.getEventById(eventId + "@google.com");
+      } catch (e) {}
+    }
+  }
+
   return event;
 }
 
