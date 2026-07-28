@@ -446,6 +446,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     }
 
     const maxCols = sheetInscriptions.getLastColumn();
+    const dataInsc = sheetInscriptions.getRange(2, 1, lastRowInsc - 1, maxCols).getValues();
     const targetSessionId = (sessionId || "").toString().trim().toUpperCase();
     const activeInscriptions = dataInsc.filter(row => (row[1] || "").toString().trim().toUpperCase() === targetSessionId);
 
