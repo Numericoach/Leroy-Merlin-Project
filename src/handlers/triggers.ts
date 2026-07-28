@@ -37,8 +37,13 @@ function onEditTrigger(e?: any): void {
   try {
     const sheetName = e.range.getSheet().getName();
     if (sheetName === "SESSIONS") {
-      Logger.log("Modification dans l'onglet SESSIONS : synchronisation des événements d'agenda...");
+      Logger.log("Modification dans l'onglet SESSIONS : synchronisation des événements d'agenda et du formulaire...");
       createEventSession();
+      try {
+        updateFormChoices();
+      } catch (formErr) {
+        Logger.log("Erreur lors de la mise à jour des choix du formulaire : " + formErr);
+      }
     }
   } catch (err) {
     Logger.log("Erreur dans onEditTrigger : " + err);
