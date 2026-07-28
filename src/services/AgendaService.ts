@@ -20,6 +20,24 @@ function getTargetCalendar(): GoogleAppsScript.Calendar.Calendar | null {
 }
 
 /**
+ * Helper robuste pour récupérer un événement Google Agenda par son ID via CalendarApp
+ */
+function getEventByIdRobust(eventId: string): GoogleAppsScript.Calendar.CalendarEvent | null {
+  if (!eventId) return null;
+  let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+  try {
+    event = CalendarApp.getEventById(eventId);
+  } catch (e) {}
+
+  if (!event && eventId.indexOf("@") === -1) {
+    try {
+      event = CalendarApp.getEventById(eventId + "@google.com");
+    } catch (e) {}
+  }
+  return event;
+}
+
+/**
  * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
  */
 function getOrCreateSessionEventId(sessionId: string): string | null {
@@ -55,16 +73,9 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
           const storedId = sessionEvenementValues[i][2] as string;
           if (storedId) {
             // Vérifier que l'événement existe bien toujours dans Google Agenda
-            try {
-              let existingEvent = agenda.getEventById(storedId);
-              if (!existingEvent && storedId.indexOf("@") === -1) {
-                existingEvent = agenda.getEventById(storedId + "@google.com");
-              }
-              if (existingEvent) {
-                return storedId;
-              }
-            } catch (checkErr) {
-              Logger.log("Avertissement vérification événement existant : " + checkErr);
+            const existingEvent = getEventByIdRobust(storedId);
+            if (existingEvent) {
+              return storedId;
             }
           }
         }
@@ -124,7 +135,7 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       + connexionInfo
       + "<p>Programme de la formation :</p>" + formationCompetences;
 
-    const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description });
+    const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
     newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
 
     const newEventId = newEvent.getId();
@@ -158,20 +169,16 @@ function addParticipantToCalendar(sessionId: string, email: string): boolean {
       return false;
     }
 
-    let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
-    try {
-      event = agenda.getEventById(eventId);
-    } catch (e) {}
-
-    if (!event && eventId.indexOf("@") === -1) {
-      try {
-        event = agenda.getEventById(eventId + "@google.com");
-      } catch (e) {}
-    }
+    const event = getEventByIdRobust(eventId);
 
     if (event) {
       event.addGuest(email);
       Logger.log("Invité ajouté avec succès à Google Agenda : " + email + " pour session " + sessionId);
+      try {
+        updateEventAttendeeListAndDescription(sessionId);
+      } catch (updateErr) {
+        Logger.log("Erreur lors de la mise à jour des détails de l'événement Agenda : " + updateErr);
+      }
       return true;
     } else {
       Logger.log("Événement Agenda introuvable avec ID: " + eventId);
@@ -194,20 +201,16 @@ function removeParticipantFromCalendar(sessionId: string, email: string): boolea
     const eventId = getOrCreateSessionEventId(sessionId);
     if (!eventId) return false;
 
-    let event: GoogleAppsScript.Calendar.CalendarEvent | null = null;
-    try {
-      event = agenda.getEventById(eventId);
-    } catch (e) {}
-
-    if (!event && eventId.indexOf("@") === -1) {
-      try {
-        event = agenda.getEventById(eventId + "@google.com");
-      } catch (e) {}
-    }
+    const event = getEventByIdRobust(eventId);
 
     if (event) {
       event.removeGuest(email);
       Logger.log("Invité retiré avec succès de Google Agenda : " + email + " pour session " + sessionId);
+      try {
+        updateEventAttendeeListAndDescription(sessionId);
+      } catch (updateErr) {
+        Logger.log("Erreur lors de la mise à jour des détails de l'événement Agenda : " + updateErr);
+      }
       return true;
     }
   } catch (err) {
@@ -215,6 +218,153 @@ function removeParticipantFromCalendar(sessionId: string, email: string): boolea
   }
   return false;
 }
+
+/**
+ * Met à jour le titre et la description de l'événement Google Agenda pour refléter le nombre total de participants
+ * et la liste nominative des directeurs inscrits avec leur nombre respectif.
+ */
+function updateEventAttendeeListAndDescription(sessionId: string): boolean {
+  if (!sessionId) return false;
+  try {
+    const agenda = getTargetCalendar();
+    if (!agenda) return false;
+
+    const eventId = getOrCreateSessionEventId(sessionId);
+    if (!eventId) return false;
+
+    const event = getEventByIdRobust(eventId);
+
+    if (!event) {
+      Logger.log("Événement introuvable pour la mise à jour de la description : " + eventId);
+      return false;
+    }
+
+    // 1. Lire toutes les inscriptions actives depuis l'onglet INSCRIPTIONS
+    const sheetInscriptions = ss ? ss.getSheetByName("INSCRIPTIONS") : null;
+    if (!sheetInscriptions) return false;
+    const lastRowInsc = sheetInscriptions.getLastRow();
+    if (lastRowInsc < 2) {
+      resetEventToDefault(event, sessionId);
+      return true;
+    }
+
+    const maxCols = sheetInscriptions.getLastColumn();
+    const dataInsc = sheetInscriptions.getRange(2, 1, lastRowInsc - 1, maxCols).getValues();
+    const activeInscriptions = dataInsc.filter(row => (row[1] || "").toString().trim() === sessionId);
+
+    let totalParticipants = 0;
+    let participantListHtml = "";
+    
+    activeInscriptions.forEach(row => {
+      const email = (row[2] || "").toString().trim();
+      const civilite = (row[3] || "").toString().trim();
+      const prenom = (row[4] || "").toString().trim();
+      const nom = (row[5] || "").toString().trim();
+      const magasin = (row[6] || "").toString().trim();
+      
+      let nbPart = 1;
+      if (row[7] !== undefined && row[7] !== "") {
+        const parsed = parseInt(row[7].toString(), 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          nbPart = parsed;
+        }
+      }
+      
+      totalParticipants += nbPart;
+      
+      const displayName = (prenom || nom) ? (civilite ? civilite + " " : "") + prenom + " " + nom : email;
+      const storeName = magasin ? " (" + magasin + ")" : "";
+      
+      participantListHtml += "<li><b>" + displayName + "</b>" + storeName + " : " + nbPart + " participant(s) (" + email + ")</li>";
+    });
+
+    if (participantListHtml === "") {
+      participantListHtml = "<li>Aucun participant inscrit pour le moment.</li>";
+    }
+
+    // 2. Récupérer les informations de base de la session depuis SESSIONS
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    let formationTitle = "Formation Leroy Merlin";
+    let formationDescription = "";
+    let formationCompetences = "";
+
+    if (sheetSessions) {
+      const lastRow = sheetSessions.getLastRow();
+      if (lastRow >= 2) {
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 13).getValues();
+        for (let i = 0; i < sessionsValues.length; i++) {
+          if (sessionsValues[i][0] === sessionId) {
+            formationTitle = sessionsValues[i][13] || formationTitle;
+            formationDescription = sessionsValues[i][8] || "";
+            break;
+          }
+        }
+      }
+    }
+
+    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
+    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+
+    // 3. Appliquer le titre au format [X participants] et description détaillée
+    const newTitle = "[" + totalParticipants + " participants] Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    
+    const newDescription = textAgenda
+      + "<p></p><b>" + formationDescription + "</b><p></p>"
+      + connexionInfo
+      + "<p>Programme de la formation :</p>" + formationCompetences
+      + "<br><hr><br>"
+      + "<h3>👤 Directeurs inscrits et participants (" + totalParticipants + ") :</h3>"
+      + "<ul>" + participantListHtml + "</ul>";
+
+    event.setTitle(newTitle);
+    event.setDescription(newDescription);
+    
+    Logger.log("Événement Agenda mis à jour avec succès : " + newTitle);
+    return true;
+  } catch (err) {
+    Logger.log("Erreur lors de la mise à jour des détails de l'événement Agenda : " + err);
+  }
+  return false;
+}
+
+/**
+ * Remet la description et le titre de l'événement à leur état initial si aucune inscription
+ */
+function resetEventToDefault(event: GoogleAppsScript.Calendar.CalendarEvent, sessionId: string): void {
+  try {
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    let formationTitle = "Formation Leroy Merlin";
+    let formationDescription = "";
+    
+    if (sheetSessions) {
+      const lastRow = sheetSessions.getLastRow();
+      if (lastRow >= 2) {
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 13).getValues();
+        for (let i = 0; i < sessionsValues.length; i++) {
+          if (sessionsValues[i][0] === sessionId) {
+            formationTitle = sessionsValues[i][13] || formationTitle;
+            formationDescription = sessionsValues[i][8] || "";
+            break;
+          }
+        }
+      }
+    }
+    
+    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
+    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+    
+    const newTitle = "[0 participant] Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const newDescription = textAgenda
+      + "<p></p><b>" + formationDescription + "</b><p></p>"
+      + connexionInfo;
+      
+    event.setTitle(newTitle);
+    event.setDescription(newDescription);
+  } catch (e) {
+    Logger.log("Erreur lors de la réinitialisation de l'événement : " + e);
+  }
+}
+
 
 /**
  * Parcourir les sessions pour créer les événements manquants
@@ -256,10 +406,7 @@ function checkGuests(): void {
   eventIds.forEach(function (eventId) {
     if (eventId !== "") {
       try {
-        let thisEvent = agenda.getEventById(eventId);
-        if (!thisEvent && eventId.indexOf("@") === -1) {
-          thisEvent = agenda.getEventById(eventId + "@google.com");
-        }
+        const thisEvent = getEventByIdRobust(eventId);
         if (!thisEvent) return;
         const thisEventTitle = thisEvent.getTitle();
         const thisGuests = thisEvent.getGuestList();
@@ -279,10 +426,79 @@ function checkGuests(): void {
   if (sheetRecapGuests) {
     const maxRows = sheetRecapGuests.getMaxRows();
     if (maxRows > 1) {
-      sheetRecapGuests.deleteRows(2, maxRows - 1);
+      sheetRecapGuests.getRange(2, 1, maxRows - 1, 3).clearContent();
     }
     if (datas.length > 0) {
       sheetRecapGuests.getRange(2, 1, datas.length, 3).setValues(datas);
     }
+  }
+}
+
+/**
+ * Fonction de test complète pour vérifier l'intégration Google Agenda.
+ * Exécutable depuis le menu NUMERICOACH > Tester l'intégration Google Agenda
+ */
+function testAgendaIntegration(): void {
+  const userEmail = Session.getActiveUser().getEmail() || "test@example.com";
+  if (ss) ss.toast("📅 Début du test Google Agenda...", "NUMERICOACH", 5);
+
+  try {
+    // 1. Vérifier l'accès à l'agenda cible
+    const agenda = getTargetCalendar();
+    if (!agenda) {
+      if (ss) ss.toast("❌ Aucun agenda disponible ! Vérifiez l'ID dans PARAMETRES ou les autorisations.", "NUMERICOACH", 8);
+      Logger.log("Test Agenda échec : getTargetCalendar() a retourné null.");
+      return;
+    }
+
+    const calName = agenda.getName();
+    const calId = agenda.getId();
+    Logger.log("Agenda cible détecté : " + calName + " (ID: " + calId + ")");
+    if (ss) ss.toast("✅ Agenda détecté : " + calName, "NUMERICOACH", 5);
+
+    // 2. Chercher une session réelle dans l'onglet SESSIONS
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    let testSessionId = "SES-TEST";
+
+    if (sheetSessions) {
+      const lastRow = sheetSessions.getLastRow();
+      if (lastRow >= 2) {
+        const sessions = sheetSessions.getRange(2, 2, lastRow - 1, 1).getValues();
+        for (let i = 0; i < sessions.length; i++) {
+          const sid = (sessions[i][0] || "").toString().trim();
+          if (sid && sid.indexOf("SES-") > -1) {
+            testSessionId = sid;
+            break;
+          }
+        }
+      }
+    }
+
+    Logger.log("Session de test sélectionnée : " + testSessionId);
+    if (ss) ss.toast("🔄 Test de création/récupération d'événement pour " + testSessionId + "...", "NUMERICOACH", 5);
+
+    // 3. Obtenir ou créer l'événement pour cette session
+    const eventId = getOrCreateSessionEventId(testSessionId);
+    if (!eventId) {
+      if (ss) ss.toast("❌ Échec de la création/récupération de l'événement pour " + testSessionId, "NUMERICOACH", 8);
+      return;
+    }
+
+    Logger.log("Événement Agenda obtenu : " + eventId);
+
+    // 4. Test d'ajout d'invité
+    if (ss) ss.toast("👤 Test d'ajout d'invité : " + userEmail + "...", "NUMERICOACH", 5);
+    const added = addParticipantToCalendar(testSessionId, userEmail);
+
+    if (added) {
+      if (ss) ss.toast("✅ Succès ! Événement et invité (" + userEmail + ") synchronisés dans Google Agenda (" + calName + ") !", "NUMERICOACH", 8);
+      Logger.log("Test Agenda RÉUSSI avec succès pour " + userEmail + " sur " + testSessionId);
+    } else {
+      if (ss) ss.toast("⚠️ Événement trouvé mais échec lors de l'ajout de l'invité. Consultez les journaux.", "NUMERICOACH", 8);
+    }
+
+  } catch (err: any) {
+    Logger.log("Erreur dans testAgendaIntegration : " + err);
+    if (ss) ss.toast("❌ Erreur Agenda : " + err.toString(), "NUMERICOACH", 8);
   }
 }

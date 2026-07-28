@@ -204,8 +204,32 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "<b>Informations de connexion :</b><br>" + connexionInfo
     + "</div>";
 
+  // Générer le lien direct 'Ajouter à mon Google Agenda'
+  let googleCalUrl = "";
+  if (dateStr) {
+    try {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const y = parts[2];
+        const m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+        const d = parts[0].length === 1 ? '0' + parts[0] : parts[0];
+        const startIso = y + m + d + "T090000Z";
+        const endIso = y + m + d + "T113000Z";
+        googleCalUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" 
+          + encodeURIComponent("Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]")
+          + "&dates=" + startIso + "/" + endIso
+          + "&details=" + encodeURIComponent("Session " + sessionId + "\n\nInformations : " + connexionInfo)
+          + "&location=" + encodeURIComponent(lieuStr || "En ligne / Distanciel");
+      }
+    } catch (e) {}
+  }
+
+  if (googleCalUrl) {
+    htmlBody += "<p style='margin: 15px 0;'><a href='" + googleCalUrl + "' style='display:inline-block; background-color:#4285F4; color:white; padding:10px 18px; text-decoration:none; border-radius:5px; font-weight:bold;'>📅 Ajouter à mon Google Agenda (1 clic)</a></p>";
+  }
+
   if (pdfResult.pdfUrl && pdfResult.pdfUrl !== "") {
-    htmlBody += "<p><a href='" + pdfResult.pdfUrl + "' style='display:inline-block; background-color:#78BE20; color:white; padding:10px 18px; text-decoration:none; border-radius:5px; font-weight:bold;'>Télécharger votre Convocation PDF</a></p>";
+    htmlBody += "<p><a href='" + pdfResult.pdfUrl + "' style='display:inline-block; background-color:#78BE20; color:white; padding:10px 18px; text-decoration:none; border-radius:5px; font-weight:bold;'>📄 Télécharger votre Convocation PDF</a></p>";
   }
 
   htmlBody += "<p style='margin-top: 25px;'><a href='" + desinscriptionLink + "' style='color:#CC3C25;'>Demander une désinscription</a></p>"

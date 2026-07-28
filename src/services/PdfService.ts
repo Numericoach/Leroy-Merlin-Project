@@ -41,34 +41,60 @@ function generateConvocationPdf(
       const replaceVariables = (element: any) => {
         if (!element) return;
         try {
-          element.replaceText("{{DATE AUJOURDHUI}}", Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy'));
-          element.replaceText("{{SESSION ID}}", sessionId);
-          element.replaceText("{{EMAIL}}", email);
-          element.replaceText("{{CIVILITE}}", civilite || "");
-          element.replaceText("{{PRENOM}}", prenom || "");
-          element.replaceText("{{NOM}}", nom || "");
-          element.replaceText("{{TITRE FORMATION}}", formationTitle);
-          element.replaceText("{{DATE}}", dateStr);
-          element.replaceText("{{HEURE DEBUT}}", heureDebutStr);
-          element.replaceText("{{HEURE FIN}}", heureFinStr);
-          element.replaceText("{{LIEU}}", lieuStr);
-          element.replaceText("{{CONNEXION}}", connexionInfo);
-          element.replaceText("{{DESCRIPTION}}", descriptionStr);
-          element.replaceText("{{APPLI}}", formationTitle);
-          element.replaceText("{{NB PARTICIPANTS}}", nbParticipants.toString());
-          element.replaceText("{{PARTICIPANTS}}", nbParticipants.toString());
-          element.replaceText("{{ADRESSE LIEU}}", adresseLieu || "");
-          element.replaceText("{{CP}}", cpLieu || "");
-          element.replaceText("{{VILLE}}", villeLieu || "");
-          element.replaceText("{{INFOS COMPLEMENTAIRES}}", infoCompStr || "");
+          const todayStr = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy');
+          try { element.replaceText("{{DATE AUJOURDHUI}}", todayStr); } catch (e) {}
+          try { element.replaceText("\\{\\{DATE AUJOURDHUI\\}\\}", todayStr); } catch (e) {}
+          try { element.replaceText("{{DATE_AUJOURDHUI}}", todayStr); } catch (e) {}
+          try { element.replaceText("\\{\\{DATE_AUJOURDHUI\\}\\}", todayStr); } catch (e) {}
+
+          const targets: Record<string, string> = {
+            "SESSION ID": sessionId,
+            "EMAIL": email,
+            "CIVILITE": civilite || "",
+            "PRENOM": prenom || "",
+            "NOM": nom || "",
+            "TITRE FORMATION": formationTitle,
+            "DATE": dateStr,
+            "HEURE DEBUT": heureDebutStr,
+            "HEURE FIN": heureFinStr,
+            "LIEU": lieuStr,
+            "CONNEXION": connexionInfo,
+            "DESCRIPTION": descriptionStr,
+            "APPLI": formationTitle,
+            "NB PARTICIPANTS": nbParticipants.toString(),
+            "PARTICIPANTS": nbParticipants.toString(),
+            "ADRESSE LIEU": adresseLieu || "",
+            "CP": cpLieu || "",
+            "VILLE": villeLieu || "",
+            "INFOS COMPLEMENTAIRES": infoCompStr || ""
+          };
+
+          for (const key in targets) {
+            const val = targets[key];
+            try { element.replaceText("{{" + key + "}}", val); } catch (e) {}
+            try { element.replaceText("\\{\\{" + key + "\\}\\}", val); } catch (e) {}
+          }
         } catch (e) {
           // ignore
         }
       };
 
+      const body = doc.getBody();
+
+      replaceVariables(body);
       replaceVariables(doc.getHeader());
       replaceVariables(doc.getFooter());
-      replaceVariables(doc.getBody());
+
+      try {
+        const parent = body.getParent();
+        for (let i = 0; i < parent.getNumChildren(); i++) {
+          const child = parent.getChild(i);
+          const childType = child.getType();
+          if (childType === DocumentApp.ElementType.HEADER_SECTION || childType === DocumentApp.ElementType.FOOTER_SECTION) {
+            replaceVariables(child);
+          }
+        }
+      } catch (e) {}
 
       doc.saveAndClose();
 
@@ -93,4 +119,44 @@ function generateConvocationPdf(
   }
 
   return { pdfAttachment, pdfUrl };
+}
+
+/**
+ * Fonction de test déclenchée depuis le menu NUMERICOACH > Tester la génération de PDF
+ */
+function testPDFGeneration(): void {
+  const activeUserEmail = Session.getActiveUser().getEmail() || "test@example.com";
+  if (ss) ss.toast("🛠️ Génération d'un PDF de test en cours...", "NUMERICOACH", 5);
+
+  try {
+    const result = generateConvocationPdf(
+      "SES-TEST",
+      activeUserEmail,
+      "Jean",
+      "DUPONT",
+      "M.",
+      "Formation Test Leroy Merlin",
+      Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy"),
+      "09h00",
+      "12h00",
+      "DISTANCIEL [LIEU-001]",
+      "https://meet.google.com/test-meet",
+      "Formation de démonstration et test de convocation PDF",
+      1,
+      "1 Rue de Test",
+      "75001",
+      "Paris",
+      "Test de convocation"
+    );
+
+    if (result.pdfUrl) {
+      if (ss) ss.toast("✅ PDF de test généré avec succès ! Lien dans le journal.", "NUMERICOACH", 7);
+      Logger.log("PDF de test créé avec succès : " + result.pdfUrl);
+    } else {
+      if (ss) ss.toast("❌ Échec de génération du PDF. Vérifiez l'ID du modèle dans PARAMETRES.", "NUMERICOACH", 7);
+    }
+  } catch (err) {
+    Logger.log("Erreur dans testPDFGeneration : " + err);
+    if (ss) ss.toast("❌ Erreur : " + err, "NUMERICOACH", 7);
+  }
 }

@@ -439,6 +439,16 @@ export class SHEETS_QUERY {
 	}
 
 	/**
+	 * Expressions régulières pré-compilées pour de meilleures performances dans returnGoodType
+	 */
+	private static readonly REGEX_STARTS_ZERO = /^0/
+	private static readonly REGEX_FRENCH_PHONE = /^(0\d{9})$|^(?:\+33|0)\d*(?:\d{2}){4}$|^\+\d{1,3}\s*(\d+\s*)+$/
+	private static readonly REGEX_LEADING_ZERO_NUM = /^0\d+$/
+	private static readonly REGEX_INTEGER = /^-?\d+$/
+	private static readonly REGEX_FLOAT = /^-?\d+[\.,]\d+$/
+	private static readonly REGEX_EXPONENT = /^(\d+(\.\d+)?)(e[+-]\d+)$/
+
+	/**
 	 * Transforms the double array to JSON
 	 *
 	 * @param {any[][]} allData The data we get in the double array format such as Range.getValues()
@@ -467,13 +477,32 @@ export class SHEETS_QUERY {
 		}
 
 		if (!headersRow) throw new Error("No data headers found")
-		// Transform this to json with colIdx
+
+		// Pré-calcul des correspondances colonnes -> clés pour éviter l'itération superflue dans les boucles
+		const mapEntries: Array<{key: string; colIndex: number}> = []
+		if (headersFromEntries && headersKeys && headersRow) {
+			for (let i = 0; i < headersKeys.length; i++) {
+				const key = headersKeys[i]
+				const headerVal = headersRow[i]
+				const idx = colIdx[headerVal]
+				if (idx !== undefined) {
+					mapEntries.push({key, colIndex: idx})
+				}
+			}
+		} else {
+			for (let i = 0; i < headersRow.length; i++) {
+				mapEntries.push({key: headersRow[i], colIndex: i})
+			}
+		}
+
+		// Transformation directe sans reduce inutile
 		const data: {[K in keyof H]: string | number | boolean}[] = allData.map((row) => {
-			return row.reduce((previous, current, index) => {
-				if (!headersFromEntries) previous[headersRow?.[index]] = this.returnGoodType(current)
-				else if (headersKeys) previous[headersKeys[index]] = this.returnGoodType(row[colIdx[headersRow?.[index]]])
-				return previous
-			}, {} as {[K in keyof H]: string | number | boolean})
+			const rowObj: any = {}
+			for (let i = 0; i < mapEntries.length; i++) {
+				const entry = mapEntries[i]
+				rowObj[entry.key] = this.returnGoodType(row[entry.colIndex])
+			}
+			return rowObj
 		})
 
 		return data
@@ -499,37 +528,28 @@ export class SHEETS_QUERY {
 	 * @returns {number | string | boolean} The value with the correct type
 	 */
 	static returnGoodType(value: string): number | string | boolean {
-		if (!value) return value
-		let valueTyped: number | string | boolean = value
-		// Starts with 0
-		if (value.match(/^0/)) {
-			valueTyped = value
-			return valueTyped
-		}
-		if (
-			typeof value === "string" &&
-			(value.match(/^(0\d{9})$/) || value.match(/^(?:\+33|0)\d*(?:\d{2}){4}$/) || value.match(/^\+\d{1,3}\s*(\d+\s*)+$/)) &&
-			!value.match(/^0\d+$/)
-		) {
-			//valid French phone number starting with 0 and of length 10, or phone number starting with "+"
-			valueTyped = value
-		} else if (typeof value === "string" && value.match(/^-?\d+$/) && !value.includes(".") && !value.includes(",") && !value.match(/^0\d+$/)) {
-			//valid integer (positive or negative)
-			valueTyped = parseInt(value)
-		} else if (
-			(typeof value === "string" && (value.match(/^\d+\.\d+$/) || value.match(/^\d+,\d+$/))) ||
-			value.match(/^-?\d+\.\d+$/) ||
-			value.match(/^-?\d+,\d+$/)
-		) {
-			//valid float
-			valueTyped = parseFloat(value.replace(",", "."))
-		} else if (typeof value === "string" && value.match(/^(\d+(\.\d+)?)(e[+-]\d+)$/) && !value.match(/^0\d+$/)) {
-			valueTyped = parseFloat(value)
-		} else if ((typeof value === "string" && (value === "TRUE" || value === "FALSE")) || value === "true" || value === "false") {
-			valueTyped = value == "TRUE" ? true : false
+		if (!value || typeof value !== "string") return value
+		if (value === "TRUE" || value === "true") return true
+		if (value === "FALSE" || value === "false") return false
+
+		if (this.REGEX_STARTS_ZERO.test(value)) {
+			if (this.REGEX_FRENCH_PHONE.test(value) && !this.REGEX_LEADING_ZERO_NUM.test(value)) {
+				return value
+			}
+			return value
 		}
 
-		return valueTyped
+		if (this.REGEX_INTEGER.test(value) && !value.includes(".") && !value.includes(",")) {
+			return parseInt(value, 10)
+		}
+		if (this.REGEX_FLOAT.test(value)) {
+			return parseFloat(value.replace(",", "."))
+		}
+		if (this.REGEX_EXPONENT.test(value) && !this.REGEX_LEADING_ZERO_NUM.test(value)) {
+			return parseFloat(value)
+		}
+
+		return value
 	}
 
 	/**

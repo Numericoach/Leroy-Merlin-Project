@@ -26,12 +26,42 @@ function onSubmit(e?: any): void {
     if (sheetName.indexOf("DESINSCRIPTION") > -1) {
       if (ss) ss.toast("Désinscription détectée. Extraction de la session...", "DÉBOGAGE", 5);
       const data = extractSubmissionData(e);
-      if (data.thisSessionid) {
+      if (data.thisSessionid && data.thisEmail) {
+        // 1. Supprimer de la feuille INSCRIPTIONS
+        if (sheetInscriptions) {
+          const lastRowInsc = sheetInscriptions.getLastRow();
+          if (lastRowInsc >= 2) {
+            const rows = sheetInscriptions.getRange(2, 1, lastRowInsc - 1, 3).getValues();
+            for (let i = rows.length - 1; i >= 0; i--) {
+              const rowSes = (rows[i][1] || "").toString().trim();
+              const rowEmail = (rows[i][2] || "").toString().trim().toLowerCase();
+              if (rowSes === data.thisSessionid && rowEmail === data.thisEmail.toLowerCase()) {
+                sheetInscriptions.deleteRow(i + 2);
+                Logger.log("Ligne d'inscription supprimée pour " + data.thisEmail + " - session " + data.thisSessionid);
+              }
+            }
+          }
+        }
+
+        // 2. Retirer de Google Agenda
+        try {
+          removeParticipantFromCalendar(data.thisSessionid, data.thisEmail);
+        } catch (agendaErr) {
+          Logger.log("Avertissement retrait agenda : " + agendaErr);
+        }
+
+        // 3. Mettre à jour le titre et la description de l'événement Agenda
+        try {
+          updateEventAttendeeListAndDescription(data.thisSessionid);
+        } catch (updateErr) {
+          Logger.log("Erreur mise à jour après désinscription : " + updateErr);
+        }
+
         if (ss) ss.toast("Place libérée pour la session : " + data.thisSessionid + ". Recherche dans la file d'attente...", "DÉBOGAGE", 5);
         Logger.log("Désinscription détectée pour la session " + data.thisSessionid);
         processWaitingList(data.thisSessionid);
       } else {
-        if (ss) ss.toast("❌ Impossible de trouver l'ID de session dans la désinscription.", "DÉBOGAGE", 8);
+        if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "DÉBOGAGE", 8);
       }
       return;
     }
@@ -119,12 +149,28 @@ function onSubmit(e?: any): void {
     let verif: any[][] = [];
     if (maxRows > 1) {
       const sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-      verif = sessionsEmail.filter(row => (row[0] === data.thisSessionid && row[1] === data.thisEmail));
+      const targetSes = (data.thisSessionid || "").trim().toUpperCase();
+      const targetEmail = (data.thisEmail || "").toString().trim().toLowerCase();
+      verif = sessionsEmail.filter(row => {
+        const rowSes = (row[0] || "").toString().trim().toUpperCase();
+        const rowEmail = (row[1] || "").toString().trim().toLowerCase();
+        return rowSes === targetSes && rowEmail === targetEmail;
+      });
     }
     
     if (verif.length > 0) {
       Logger.log("Déjà inscrit : " + data.thisEmail + " à " + data.thisSessionid);
-      if (ss) ss.toast("ℹ️ Vous êtes déjà inscrit à la session " + data.thisSessionid + ". Pas de nouveau mail envoyé.", "INFO", 7);
+      if (ss) ss.toast("ℹ️ " + data.thisEmail + " est déjà inscrit(e) à la session " + data.thisSessionid + ". Ligne en doublon supprimée.", "INFO", 7);
+      
+      // SUPPRIMER LA LIGNE EN DOUBLON DE LA FEUILLE DE RÉPONSES
+      if (e && e.range) {
+        try {
+          e.range.getSheet().deleteRow(e.range.getRow());
+          Logger.log("Ligne d'inscription en doublon supprimée de " + e.range.getSheet().getName() + " à la ligne " + e.range.getRow());
+        } catch (delErr) {
+          Logger.log("Erreur lors de la suppression de la ligne en doublon : " + delErr);
+        }
+      }
       return;
     }
 
@@ -158,13 +204,12 @@ function onSubmit(e?: any): void {
   }
 }
 
-/**
- * Enregistrer l'inscription dans la feuille de calcul avec le timestamp exact du formulaire
- */
 function inscription(time: any, sessionId: string, email: string, nbParticipants: number = 1): void {
   if (sheetInscriptions) {
-    // N'ajouter que 3 colonnes pour ne pas écraser les formules de la colonne D
-    sheetInscriptions.appendRow([time, sessionId, email]);
+    const cleanSessionId = (sessionId || "").toString().trim().toUpperCase();
+    const cleanEmail = (email || "").toString().trim().toLowerCase();
+    // N'ajouter que 3 colonnes propres pour ne pas écraser les formules de la colonne D
+    sheetInscriptions.appendRow([time, cleanSessionId, cleanEmail]);
   }
 }
 
@@ -410,6 +455,20 @@ function processUnprocessedInscriptions(): void {
   const data = sheetFormResps.getRange(2, 1, lastRow - 1, 10).getValues();
   let countProcessed = 0;
 
+  // Charger toutes les inscriptions existantes une seule fois avant la boucle pour un contrôle en O(1)
+  const existingSet = new Set<string>();
+  const maxRows = sheetInscriptions.getMaxRows();
+  if (maxRows > 1) {
+    const existing = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
+    existing.forEach(r => {
+      const ses = (r[0] || "").toString().trim();
+      const em = (r[1] || "").toString().trim().toLowerCase();
+      if (ses && em) {
+        existingSet.add(ses + "|" + em);
+      }
+    });
+  }
+
   data.forEach(row => {
     const time = row[0] || new Date();
     const email = (row[1] || "").toString().trim();
@@ -427,15 +486,9 @@ function processUnprocessedInscriptions(): void {
       sessionId = rawSession;
     }
 
-    // Vérifier si déjà dans INSCRIPTIONS
-    const maxRows = sheetInscriptions.getMaxRows();
-    let isAlreadyIn = false;
-    if (maxRows > 1) {
-      const existing = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-      isAlreadyIn = existing.some(r => r[0] === sessionId && r[1] === email);
-    }
-
-    if (!isAlreadyIn) {
+    const key = sessionId + "|" + email.toLowerCase();
+    if (!existingSet.has(key)) {
+      existingSet.add(key);
       inscription(time, sessionId, email, 1);
       try {
         addParticipantToCalendar(sessionId, email);
