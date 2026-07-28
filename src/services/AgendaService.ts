@@ -104,7 +104,13 @@ function getNbParticipantsForEmailAndSession(sessionId: string, email: string): 
     const sheets = ss.getSheets();
     for (let s = 0; s < sheets.length; s++) {
       const name = sheets[s].getName();
-      if (name.indexOf("Form") > -1 || name.indexOf("Réponses") > -1 || name.indexOf("Form_Responses") > -1) {
+      const lowerName = name.toLowerCase();
+      if (
+        lowerName.indexOf("form") > -1 ||
+        lowerName.indexOf("répons") > -1 ||
+        lowerName.indexOf("repons") > -1 ||
+        lowerName.indexOf("inscriptions") > -1
+      ) {
         const lastRow = sheets[s].getLastRow();
         const lastCol = sheets[s].getLastColumn();
         if (lastRow >= 2 && lastCol >= 2) {
@@ -118,8 +124,11 @@ function getNbParticipantsForEmailAndSession(sessionId: string, email: string): 
               const rowEmail = (values[r][emailColIdx] || "").toString().toLowerCase().trim();
               if (rowEmail === cleanEmail) {
                 if (nbColIdx > -1 && values[r][nbColIdx] !== undefined && values[r][nbColIdx] !== null && values[r][nbColIdx] !== "") {
-                  const parsed = parseInt(values[r][nbColIdx].toString(), 10);
-                  if (!isNaN(parsed) && parsed > 0) return parsed;
+                  const rawVal = values[r][nbColIdx].toString().trim();
+                  const parsed = parseInt(rawVal.replace(/[^0-9]/g, ""), 10);
+                  if (!isNaN(parsed) && parsed > 0) {
+                    return parsed;
+                  }
                 }
               }
             }
