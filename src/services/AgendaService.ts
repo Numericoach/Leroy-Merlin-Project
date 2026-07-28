@@ -445,11 +445,12 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     let formationTitle = "Formation Leroy Merlin";
     let formationDescription = "";
     let formationCompetences = "";
+    let cleanTitle = "Accompagnement Leroy Merlin [" + sessionId + "]";
 
     if (sheetSessions) {
       const lastRow = sheetSessions.getLastRow();
       if (lastRow >= 2) {
-        let cleanTitle = "Accompagnement Leroy Merlin [" + sessionId + "]";
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
         for (let i = 0; i < sessionsValues.length; i++) {
           if (sessionsValues[i][0] === sessionId) {
             formationTitle = sessionsValues[i][13] || sessionsValues[i][1] || formationTitle;
