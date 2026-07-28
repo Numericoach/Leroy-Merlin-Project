@@ -137,12 +137,16 @@ function updateFormChoices(): void {
         if (!formInfo.id) return;
         const form = FormApp.openById(formInfo.id);
         const items = form.getItems();
-        const targetItems: (GoogleAppsScript.Forms.ListItem | GoogleAppsScript.Forms.MultipleChoiceItem)[] = [];
+        const targetItems: (GoogleAppsScript.Forms.ListItem | GoogleAppsScript.Forms.MultipleChoiceItem | GoogleAppsScript.Forms.CheckboxItem)[] = [];
 
         for (let i = 0; i < items.length; i++) {
           const title = items[i].getTitle().toLowerCase();
           const type = items[i].getType();
-          if (type === FormApp.ItemType.LIST || type === FormApp.ItemType.MULTIPLE_CHOICE) {
+          if (
+            type === FormApp.ItemType.LIST ||
+            type === FormApp.ItemType.MULTIPLE_CHOICE ||
+            type === FormApp.ItemType.CHECKBOX
+          ) {
             if (
               title.indexOf("inscription") > -1 ||
               title.indexOf("session") > -1 ||
@@ -150,20 +154,28 @@ function updateFormChoices(): void {
               title.indexOf("créneau") > -1 ||
               title.indexOf("creneau") > -1 ||
               title.indexOf("choix") > -1 ||
-              title.indexOf("date") > -1
+              title.indexOf("date") > -1 ||
+              title.indexOf("suivante") > -1 ||
+              title.indexOf("concernée") > -1 ||
+              title.indexOf("concernee") > -1 ||
+              title.indexOf("désinscription") > -1 ||
+              title.indexOf("desinscription") > -1 ||
+              title.indexOf("attente") > -1
             ) {
               if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
-              else targetItems.push(items[i].asMultipleChoiceItem());
+              else if (type === FormApp.ItemType.MULTIPLE_CHOICE) targetItems.push(items[i].asMultipleChoiceItem());
+              else if (type === FormApp.ItemType.CHECKBOX) targetItems.push(items[i].asCheckboxItem());
             }
           }
         }
 
-        // Fallback
+        // Fallback si aucun titre spécifique n'a été trouvé
         if (targetItems.length === 0) {
           for (let i = 0; i < items.length; i++) {
             const type = items[i].getType();
             if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
             else if (type === FormApp.ItemType.MULTIPLE_CHOICE) targetItems.push(items[i].asMultipleChoiceItem());
+            else if (type === FormApp.ItemType.CHECKBOX) targetItems.push(items[i].asCheckboxItem());
           }
         }
 
@@ -175,6 +187,8 @@ function updateFormChoices(): void {
               (item as GoogleAppsScript.Forms.ListItem).setChoiceValues(choicesToApply);
             } else if (item.getType() === FormApp.ItemType.MULTIPLE_CHOICE) {
               (item as GoogleAppsScript.Forms.MultipleChoiceItem).setChoiceValues(choicesToApply);
+            } else if (item.getType() === FormApp.ItemType.CHECKBOX) {
+              (item as GoogleAppsScript.Forms.CheckboxItem).setChoiceValues(choicesToApply);
             }
           });
           totalUpdated++;
