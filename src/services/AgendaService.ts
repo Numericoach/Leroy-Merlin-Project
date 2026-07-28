@@ -473,13 +473,19 @@ function createEventSession(): void {
   const lastRow = sheetSessions.getLastRow();
   if (lastRow < 2) return;
 
+  if (ss) ss.toast("📅 Synchronisation/Pré-réservation des événements Google Agenda...", "NUMERICOACH", 5);
+
+  let count = 0;
   const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 1).getValues();
   sessionsValues.forEach(function (row) {
-    const sessionId = row[0];
+    const sessionId = (row[0] || "").toString().trim();
     if (sessionId && sessionId !== "") {
-      getOrCreateSessionEventId(sessionId);
+      const evtId = getOrCreateSessionEventId(sessionId);
+      if (evtId) count++;
     }
   });
+
+  if (ss) ss.toast("✅ " + count + " événement(s) de session synchronisé(s) et réservé(s) dans Google Agenda !", "NUMERICOACH", 7);
 }
 
 /**

@@ -36,8 +36,10 @@ function onEditTrigger(e?: any): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    Logger.log("Modification détectée dans l'onglet : " + sheetName + " (Mise à jour désactivée à la demande de l'utilisateur)");
-    // updateFormChoices();
+    if (sheetName === "SESSIONS") {
+      Logger.log("Modification dans l'onglet SESSIONS : synchronisation des événements d'agenda...");
+      createEventSession();
+    }
   } catch (err) {
     Logger.log("Erreur dans onEditTrigger : " + err);
   }
