@@ -87,6 +87,18 @@ function getParamValue(paramKey: string): string {
       paramCache.set(paramKey, val);
       return val;
     }
+    if (paramKey === "PARAMETRE_CONNEXION_1" && (noAccentRaw.indexOf("lien connexion") > -1 || noAccentRaw.indexOf("connexion") > -1)) {
+      paramCache.set(paramKey, val);
+      return val;
+    }
+    if (paramKey === "PARAMETRE_TEXTE_AGENDA" && (noAccentRaw.indexOf("texte pour tous les evenements") > -1 || noAccentRaw.indexOf("texte pour tous") > -1)) {
+      paramCache.set(paramKey, val);
+      return val;
+    }
+    if (paramKey === "PARAMETRE_EXPEDITEUR_EMAIL" && (noAccentRaw.indexOf("mail expediteur") > -1 || noAccentRaw.indexOf("expediteur") > -1)) {
+      paramCache.set(paramKey, val);
+      return val;
+    }
   }
 
   paramCache.set(paramKey, "");

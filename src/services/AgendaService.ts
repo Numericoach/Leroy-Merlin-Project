@@ -42,20 +42,28 @@ function getEventByIdRobust(eventId: string): GoogleAppsScript.Calendar.Calendar
  */
 function getCleanFormationTitle(rawTitle: string): string {
   if (!rawTitle) return "";
-  const cleaned = rawTitle
+  let cleaned = rawTitle
+    .replace(/\[FOR-.*?\]/gi, "")
     .replace(/^Accompagnement Leroy Merlin\s*-\s*/i, "")
     .replace(/^Accompagnement Leroy Merlin/i, "")
     .replace(/^Formation Leroy Merlin\s*-\s*/i, "")
     .replace(/^Formation Leroy Merlin/i, "")
+    .replace(/^Formation\s*/i, "")
     .trim();
   return cleaned || rawTitle;
 }
 
 /**
- * Extrait le lien Google Meet configuré pour une session (depuis LIEUX ou lien distanciel par défaut)
+ * Extrait le lien Google Meet configuré pour une session (depuis PARAMETRES, LIEUX ou lien distanciel par défaut)
  */
 function getMeetUrlForSession(sessionId: string): string {
   try {
+    const connInfo = getParamValue("PARAMETRE_CONNEXION_1");
+    if (connInfo) {
+      const meetMatch = connInfo.match(/(https:\/\/meet\.google\.com\/[a-z0-9\-]+)/i);
+      if (meetMatch) return meetMatch[1];
+    }
+
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (sheetSessions) {
       const lastRow = sheetSessions.getLastRow();
