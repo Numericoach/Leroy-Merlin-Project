@@ -131,6 +131,7 @@ function onOpen(): void {
     .addItem('Tester la génération de PDF', 'testPDFGeneration')
     .addItem('Tester l\'intégration Google Agenda', 'testAgendaIntegration')
     .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
+    .addItem('Générer les Documentations (Google Docs)', 'createGoogleDocsDocumentation')
     .addItem('Installer / Réinitialiser les déclencheurs (Triggers)', 'setupTriggers')
     .addItem('Retraiter les inscriptions non traitées', 'processUnprocessedInscriptions')
     .addToUi();
