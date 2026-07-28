@@ -295,11 +295,7 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const meetUrl = getMeetUrlForSession(sessionId);
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
-    const description = meetHeader
-      + textAgenda
-      + "<p></p><b>" + formationDescription + "</b><p></p>"
-      + connexionInfo
-      + "<p>Programme de l'accompagnement :</p>" + formationCompetences;
+    const description = "<h3>👤 Inscrits et participants (Total : 0) :</h3><ul><li>Aucun participant inscrit pour le moment.</li></ul>";
 
     const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
     newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
@@ -525,13 +521,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const meetUrl = getMeetUrlForSession(sessionId);
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
-    const newDescription = meetHeader
-      + (textAgenda ? textAgenda + "<p></p>" : "")
-      + (formationDescription ? "<b>" + formationDescription + "</b><p></p>" : "")
-      + (connexionInfo ? connexionInfo + "<p></p>" : "")
-      + (formationCompetences ? "<p>Programme de l'accompagnement :</p>" + formationCompetences : "")
-      + "<br><hr><br>"
-      + "<h3>👤 Inscrits et participants (Total : " + totalParticipants + ") :</h3>"
+    const newDescription = "<h3>👤 Inscrits et participants (Total : " + totalParticipants + ") :</h3>"
       + "<ul>" + participantListHtml + "</ul>";
 
     event.setTitle(cleanTitle);
@@ -573,9 +563,7 @@ function resetEventToDefault(event: GoogleAppsScript.Calendar.CalendarEvent, ses
     
     const cleanFormTitle = getCleanFormationTitle(formationTitle);
     const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
-    const newDescription = textAgenda
-      + "<p></p><b>" + formationDescription + "</b><p></p>"
-      + connexionInfo;
+    const newDescription = "<h3>👤 Inscrits et participants (Total : 0) :</h3><ul><li>Aucun participant inscrit pour le moment.</li></ul>";
       
     event.setTitle(cleanTitle);
     event.setDescription(newDescription);
