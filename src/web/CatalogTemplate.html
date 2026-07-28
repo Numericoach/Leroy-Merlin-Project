@@ -184,7 +184,7 @@
           <!-- Footer de la carte -->
           <div class="card-footer">
             <div class="places-text">
-              Plus que <strong><?= s.places ?></strong> places.
+              Plus que <strong><?= s.places ?></strong> <?= s.places > 1 ? 'places' : 'place' ?>.
             </div>
             <!-- Le bouton prend la couleur du thème -->
             <a href="<?= s.lienInscription ?>" class="btn-inscrire" style="background-color: <?= s.couleur ?>;" target="_blank">
