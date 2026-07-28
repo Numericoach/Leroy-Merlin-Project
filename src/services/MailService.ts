@@ -243,8 +243,23 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   };
 
   if (senderEmail && senderEmail.length > 3) {
-    mailOptions.from = senderEmail;
-    mailOptions.replyTo = senderEmail;
+    const trimmedSender = senderEmail.trim();
+    mailOptions.replyTo = trimmedSender;
+
+    try {
+      const aliases = GmailApp.getAliases();
+      const currentUserEmail = Session.getActiveUser().getEmail();
+      
+      // Si l'adresse est l'utilisateur principal ou un alias validé dans Gmail
+      if (trimmedSender === currentUserEmail || aliases.indexOf(trimmedSender) > -1) {
+        mailOptions.from = trimmedSender;
+      } else {
+        Logger.log("ℹ️ L'adresse expéditeur '" + trimmedSender + "' n'est pas encore enregistrée comme Alias dans votre Gmail. Allez dans Gmail > Paramètres > Comptes et importation > Envoyer des e-mails en tant que pour l'ajouter.");
+        mailOptions.from = trimmedSender; // On essaie quand même
+      }
+    } catch (aliasErr) {
+      mailOptions.from = trimmedSender;
+    }
   }
 
   if (pdfResult.pdfAttachment) {
@@ -254,7 +269,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   try {
     MailApp.sendEmail(mailOptions);
   } catch (err) {
-    Logger.log("Avertissement expéditeur personnalisé : " + err + ". Tentative d'envoi avec l'expéditeur par défaut...");
+    Logger.log("Avertissement expéditeur personnalisé (" + senderEmail + ") : " + err + ". L'e-mail a été envoyé avec l'adresse d'exécution principale par défaut.");
     delete mailOptions.from;
     MailApp.sendEmail(mailOptions);
   }
