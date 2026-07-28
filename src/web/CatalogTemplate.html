@@ -44,6 +44,7 @@
       align-items: center;
       padding: 20px;
       color: white;
+      background-color: var(--card-theme-color, #2E75FF);
     }
 
     .app-icon-container {
@@ -83,6 +84,7 @@
       font-size: 1.2rem;
       font-weight: 700;
       margin: 0 0 15px 0;
+      color: var(--card-theme-color, #2E75FF);
     }
 
     .session-details {
@@ -135,6 +137,7 @@
       justify-content: center;
       align-items: center;
       transition: opacity 0.2s;
+      background-color: var(--card-theme-color, #2E75FF);
     }
 
     .btn-inscrire:hover {
@@ -158,9 +161,9 @@
       <? for (var i = 0; i < sessionsData.length; i++) { 
            var s = sessionsData[i]; 
       ?>
-        <div class="session-card">
+        <div class="session-card" style="--card-theme-color: <?= s.couleur ?>;">
           <!-- Header dynamique avec la couleur de l'application -->
-          <div class="card-header" style="background-color: <?= s.couleur ?>;">
+          <div class="card-header">
             <div class="app-icon-container">
               <? if (s.imageUrl) { ?>
                 <img src="<?= s.imageUrl ?>" alt="Icon">
@@ -172,7 +175,7 @@
           <!-- Corps de la carte -->
           <div class="card-body">
             <!-- La date prend la couleur du thème -->
-            <h3 class="session-date" style="color: <?= s.couleur ?>;"><?= s.date ?></h3>
+            <h3 class="session-date"><?= s.date ?></h3>
             <p class="session-details"><?= s.horaire ?></p>
             <p class="session-details">lieu : <?= s.lieu ?></p>
             
@@ -187,7 +190,7 @@
               Plus que <strong><?= s.places ?></strong> <?= s.places > 1 ? 'places' : 'place' ?>.
             </div>
             <!-- Le bouton prend la couleur du thème -->
-            <a href="<?= s.lienInscription ?>" class="btn-inscrire" style="background-color: <?= s.couleur ?>;" target="_blank">
+            <a href="<?= s.lienInscription ?>" class="btn-inscrire" target="_blank">
               Je m'inscris
             </a>
           </div>
