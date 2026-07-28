@@ -437,8 +437,8 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     }
 
     const maxCols = sheetInscriptions.getLastColumn();
-    const dataInsc = sheetInscriptions.getRange(2, 1, lastRowInsc - 1, maxCols).getValues();
-    const activeInscriptions = dataInsc.filter(row => (row[1] || "").toString().trim() === sessionId);
+    const targetSessionId = (sessionId || "").toString().trim().toUpperCase();
+    const activeInscriptions = dataInsc.filter(row => (row[1] || "").toString().trim().toUpperCase() === targetSessionId);
 
     let totalParticipants = 0;
     let participantListHtml = "";
@@ -461,6 +461,22 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     });
 
     if (participantListHtml === "") {
+      const sheetRaw = ss ? (ss.getSheetByName("INSCRIPTIONSS") || ss.getSheetByName("INSCRIPTIONS FORM")) : null;
+      if (sheetRaw && sheetRaw.getLastRow() >= 2) {
+        const rawData = sheetRaw.getRange(2, 1, sheetRaw.getLastRow() - 1, sheetRaw.getLastColumn()).getValues();
+        rawData.forEach(r => {
+          const rSes = (r[1] || "").toString().trim().toUpperCase();
+          const rEmail = (r[2] || "").toString().trim().toLowerCase();
+          if (rSes === targetSessionId && rEmail) {
+            let nbPart = getNbParticipantsForEmailAndSession(sessionId, rEmail);
+            totalParticipants += nbPart;
+            participantListHtml += "<li><b>" + rEmail + "</b> : " + nbPart + " participant(s)</li>";
+          }
+        });
+      }
+    }
+
+    if (participantListHtml === "") {
       participantListHtml = "<li>Aucun participant inscrit pour le moment.</li>";
     }
 
@@ -476,7 +492,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
       if (lastRow >= 2) {
         const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
         for (let i = 0; i < sessionsValues.length; i++) {
-          if (sessionsValues[i][0] === sessionId) {
+          if ((sessionsValues[i][0] || "").toString().trim().toUpperCase() === targetSessionId) {
             formationTitle = sessionsValues[i][13] || sessionsValues[i][1] || formationTitle;
             formationDescription = sessionsValues[i][8] || "";
             const sessionModuleColC = sessionsValues[i][1] || "";
@@ -490,7 +506,8 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     }
 
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
-    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+    let connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+    connexionInfo = connexionInfo.replace(/Connectez-vous le jour J.*?https:\/\/meet\.google\.com\/[a-z0-9-]+/gi, "").replace(/https:\/\/meet\.google\.com\/[a-z0-9-]+/gi, "").trim();
 
     const countTag = totalParticipants > 0 ? " (" + totalParticipants + " inscrit" + (totalParticipants > 1 ? "s" : "") + ")" : "";
     cleanTitle = cleanTitle + countTag;
@@ -499,10 +516,10 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
     const newDescription = meetHeader
-      + textAgenda
-      + "<p></p><b>" + formationDescription + "</b><p></p>"
-      + connexionInfo
-      + "<p>Programme de l'accompagnement :</p>" + formationCompetences
+      + (textAgenda ? textAgenda + "<p></p>" : "")
+      + (formationDescription ? "<b>" + formationDescription + "</b><p></p>" : "")
+      + (connexionInfo ? connexionInfo + "<p></p>" : "")
+      + (formationCompetences ? "<p>Programme de l'accompagnement :</p>" + formationCompetences : "")
       + "<br><hr><br>"
       + "<h3>👤 Inscrits et participants (Total : " + totalParticipants + ") :</h3>"
       + "<ul>" + participantListHtml + "</ul>";
