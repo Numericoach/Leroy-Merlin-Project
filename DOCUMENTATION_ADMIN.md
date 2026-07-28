@@ -1,161 +1,198 @@
-# Documentation Administrateur - Système de Gestion des Inscriptions Leroy Merlin x Numericoach
+# 📘 Documentation Administrateur - Système de Gestion des Inscriptions Leroy Merlin x Numericoach
 
-Ce document constitue le guide de référence complet pour l'administration, le paramétrage, le suivi et la maintenance du système d'automatisation des inscriptions aux formations Leroy Merlin.
+Ce document est la notice technique et administrative complète du système d'automatisation des inscriptions aux formations Leroy Merlin. Il est spécialement structuré pour être copié-collé directement dans un Google Doc.
 
 ---
 
 ## 📋 Table des Matières
-1. [Vue d'Ensemble & Architecture du Code](#1-vue-densemble--architecture-du-code)
-2. [Structure de la Base de Données (Google Sheets)](#2-structure-de-la-base-de-données-google-sheets)
-3. [Configuration des Paramètres (Onglet `PARAMETRES`)](#3-configuration-des-paramètres-onglet-parametres)
-4. [Gestion des Formulaires Google Forms](#4-gestion-des-formulaires-google-forms)
-5. [Gestion de l'Agenda Google & des Visioconférences](#5-gestion-de-lagenda-google--des-visioconférences)
-6. [Génération des Convocations PDF & Envois d'E-mails](#6-génération-des-convocations-pdf--envois-d-e-mails)
-7. [Catalogue WebApp Dynamique](#7-catalogue-webapp-dynamique)
-8. [Procédures d'Administration & Menu NUMERICOACH](#8-procédures-dadministration--menu-numericoach)
-9. [Guide de Déploiement & Maintenance Technique](#9-guide-de-déploiement--maintenance-technique)
+1. [Présentation Générale & Architecture du Système](#1-présentation-générale--architecture-du-système)
+2. [Guide d'Installation & Configuration Initiale (Setup Pas à Pas)](#2-guide-dinstallation--configuration-initiale-setup-pas-à-pas)
+3. [Description Détaillée des Onglets Google Sheets](#3-description-détaillée-des-onglets-google-sheets)
+4. [Référentiel des Paramètres Système (Onglet PARAMETRES)](#4-référentiel-des-paramètres-système-onglet-parametres)
+5. [Fonctionnement des Automatismes & Services](#5-fonctionnement-des-automatismes--services)
+6. [Guide d'Utilisation du Menu Administrateur NUMERICOACH](#6-guide-dutilisation-du-menu-administrateur-numericoach)
+7. [Dépannage & Résolution des Incidents Courants](#7-dépannage--résolution-des-incidents-courants)
 
 ---
 
-## 1. Vue d'Ensemble & Architecture du Code
+## 1. Présentation Générale & Architecture du Système
 
-Le projet est développé en TypeScript et déployé sur Google Apps Script via la CLI `clasp`. Le code est modulaire et structuré dans le dossier `src/` :
+Le système orchestre l'ensemble du cycle de vie d'une formation : de la publication des sessions sur le catalogue WebApp jusqu'à la convocation des participants et la synchronisation de l'agenda Google.
 
-* **[src/config/Settings.ts](file:///c:/Project/Leroy-Merlin-Project/src/config/Settings.ts)** : Gestion de l'accès dynamique et de la mise en cache des clés de configuration de l'onglet `PARAMETRES`.
-* **[src/services/FormService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/FormService.ts)** : Gestion de la synchronisation automatique des choix de sessions (listes déroulantes, choix multiples, cases à cocher) dans les formulaires Google Forms.
-* **[src/services/AgendaService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/AgendaService.ts)** : Gestion de la création et de la mise à jour des événements Google Agenda, ajout des invités, gestion du nombre d'inscrits dans le titre et mise à jour de la description nominative.
-* **[src/services/MailService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/MailService.ts)** : Envoi automatisé des convocations par e-mail avec pièce jointe PDF et liens d'action (désinscription, liste d'attente).
-* **[src/services/PdfService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/PdfService.ts)** : Génération automatique des convocations au format PDF à partir d'un modèle Google Docs dans Google Drive.
-* **[src/handlers/FormHandler.ts](file:///c:/Project/Leroy-Merlin-Project/src/handlers/FormHandler.ts)** : Traitement principal déclenché lors de la soumission d'une inscription ou d'une désinscription.
-* **[src/handlers/triggers.ts](file:///c:/Project/Leroy-Merlin-Project/src/handlers/triggers.ts)** : Installation et exécution des déclencheurs automatiques (`onFormSubmit`, `onEditTrigger`).
-* **[src/web/WebApp.ts](file:///c:/Project/Leroy-Merlin-Project/src/web/WebApp.ts)** : Contrôleur du catalogue de formations publié en application Web Google.
-* **[src/web/CatalogTemplate.html](file:///c:/Project/Leroy-Merlin-Project/src/web/CatalogTemplate.html)** : Interface utilisateur (HTML/CSS) du catalogue public des sessions disponibles.
-* **[src/utils.ts](file:///c:/Project/Leroy-Merlin-Project/src/utils.ts)** : Fonctions utilitaires (extraction d'ID, formatage propre des dates et des heures).
-
----
-
-## 2. Structure de la Base de Données (Google Sheets)
-
-Le classeur Google Sheets fait office de base de données centrale. Il comporte 6 onglets principaux :
-
-| Onglet | Rôle Administrateur |
-| :--- | :--- |
-| **`SESSIONS`** | Saisie des sessions de formation (Dates, Heures, Intitulés, Lieu, Nombre de places, État de publication). |
-| **`INSCRIPTIONS`** | Liste consolidée et nettoyée des inscrits validés avec leurs informations et liens de désinscription. |
-| **`INSCRIPTIONSS`** | Onglet de réception brute des réponses soumises via le Google Formulaire d'inscription. |
-| **`PARAMETRES`** | Table des variables de configuration système (IDs de formulaires, ID d'agenda, e-mail expéditeur). |
-| **`SESSION AGENDA`** | Table d'association entre l'identifiant de la session (`SES-XXXX`) et l'ID de l'événement Google Agenda correspondant. |
-| **`GED`** | Historique et archivage des liens vers les documents PDF de convocation générés. |
+```
+                    ┌─────────────────────────┐
+                    │ Catalogue WebApp / Form │
+                    └────────────┬────────────┘
+                                 │ Inscription
+                                 ▼
+                    ┌─────────────────────────┐
+                    │  Feuille Google Sheets  │
+                    └────────────┬────────────┘
+                                 │ Déclencheur onSubmit
+         ┌───────────────────────┼───────────────────────┐
+         ▼                       ▼                       ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│  Google Agenda   │    │ Convocation PDF  │    │ Email Confirmation│
+│  (Lien Meet +    │    │ (Génération Drive│    │  (Avec PDF & Lien │
+│  Liste Inscrits) │    │   depuis Modèle) │    │  Désinscription)  │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
+```
 
 ---
 
-## 3. Configuration des Paramètres (Onglet `PARAMETRES`)
+## 2. Guide d'Installation & Configuration Initiale (Setup Pas à Pas)
 
-Pour modifier le comportement du système sans toucher au code, il faut accéder à l'onglet **`PARAMETRES`** du Google Sheets.
+Pour initialiser le système sur un nouveau compte ou un nouveau classeur, vous devez suivre rigoureusement les 5 étapes ci-dessous :
 
-![Onglet Paramètres Système](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785237973899.png)
+### Étape 1 : Préparation du Classeur Google Sheets
+1. Ouvrez le classeur maître Google Sheets.
+2. Vérifiez que les 6 onglets obligatoires sont présents : `SESSIONS`, `INSCRIPTIONS`, `INSCRIPTIONSS`, `PARAMETRES`, `SESSION AGENDA` et `GED`.
 
-![IDs de Formulaires et Textes de Convocations](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785237993748.png)
-
-### Tableau des clés de configuration principales :
-
-| Clé (Colonne B) | Description & Instructions |
-| :--- | :--- |
-| **`ID Agenda >`** | Rentrez l'identifiant complet de l'agenda Google cible (ex: `c_xxxxxx@group.calendar.google.com`). Le compte exécutant le script doit disposer des droits d'écriture sur cet agenda. |
-| **`Mail Expediteur`** | Définissez l'adresse e-mail qui apparaîtra en expéditeur des convocations (ex: `thierry.vanoffe@ext.leroymerlin.fr`). |
-| **`Id Form Edit Inscriptions`** | Rentrez l'ID d'Édition du Google Form d'inscription principal (trouvable dans l'URL `/edit` du formulaire). |
-| **`Id Form Edit Liste Attente`** | Rentrez l'ID d'Édition du Google Form de Liste d'Attente. |
-| **`Id Form Edit Desinscription`** | Rentrez l'ID d'Édition du Google Form de Désinscription. |
-| **`ID du docs Modèle de convocation >`** | ID du modèle Google Docs servant de trame pour générer les convocations PDF. |
-| **`ID du dossier recueillant les convocations >`** | ID du dossier Google Drive dans lequel les convocations PDF sont enregistrées. |
+📷 **[EMPLACEMENT CAPTURE N°1 : Onglets du Classeur Google Sheets]**  
+*👉 Insérez ici une capture montrant la barre d'onglets en bas du classeur Google Sheets (SESSIONS, INSCRIPTIONS, PARAMETRES, etc.).*
 
 ---
 
-## 4. Gestion des Formulaires Google Forms
-
-Le système synchronise dynamiquement les options de choix de sessions sur 3 formulaires Google Forms :
-
-1. **Formulaire d'Inscription Principal** : Ne présente que les sessions **publiées et ayant des places restantes**.
-2. **Formulaire de Liste d'Attente** : Présente l'ensemble des sessions publiées afin d'accepter les demandes lorsque la session est complète.
-3. **Formulaire de Désinscription** : Présente l'ensemble des sessions pour permettre à un participant d'annuler sa présence.
-
-![Formulaire d'Édition Liste d'Attente](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785238995373.png)
-
-![Formulaire de Désinscription](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785238733259.png)
+### Étape 2 : Récupération des IDs d'Édition des Formulaires Google Forms
+Vous devez utiliser **3 formulaires Google Forms** :
+- Formulaire n°1 : **Inscription principale**
+- Formulaire n°2 : **Liste d'attente**
+- Formulaire n°3 : **Désinscription**
 
 > [!IMPORTANT]
-> Pour que la synchronisation fonctionne, vous devez toujours renseigner les **IDs d'Édition** des formulaires (se terminant par `/edit` dans le navigateur) dans l'onglet `PARAMETRES`, et non les liens de réponse publique (`/viewform` ou `1FAIpQL...`).
+> Pour chacun de ces formulaires, vous devez ouvrir la page de modification (l'URL se termine par `/edit`) et copier l'identifiant présent dans l'adresse URL entre `/d/` et `/edit`.  
+> *Exemple d'URL d'édition :* `https://docs.google.com/forms/d/1LOsvh4spCORP-xkR8dhTFlYvmXtXRvjNnYkTrmJCbQo/edit`  
+> *L'ID d'Édition est :* `1LOsvh4spCORP-xkR8dhTFlYvmXtXRvjNnYkTrmJCbQo`
+
+📷 **[EMPLACEMENT CAPTURE N°2 : URL d'Édition d'un Google Formulaire]**  
+*👉 Insérez ici une capture de la barre d'adresse de votre navigateur sur Google Forms, en surbrillance sur l'ID d'édition.*
 
 ---
 
-## 5. Gestion de l'Agenda Google & des Visioconférences
-
-Le module [src/services/AgendaService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/AgendaService.ts) orchestre la création et le rafraîchissement des événements d'agenda :
-
-* **Titre dynamique de l'événement** : Se met à jour au format :
-  - `(1 participant) Titre de la Formation [SES-XXXX]` *(si 1 seul inscrit)*
-  - `(X participants) Titre de la Formation [SES-XXXX]` *(si plusieurs inscrits)*
-* **Lien Google Meet de visioconférence** : Un lien Google Meet unique est automatiquement rattaché à l'événement lors de sa création.
-* **Description nominative** : La description de l'événement est enrichie en temps réel avec la liste exhaustive des participants (Nom, Prénom, Magasin, Email et nombre de places réservées).
-* **Gestion des annulations** : Lorsqu'un inscrit se désinscrit, il est automatiquement retiré des invités de l'événement et le titre ainsi que la description sont mis à jour instantanément.
+### Étape 3 : Configuration de l'Agenda Google
+1. Rendez-vous sur [Google Agenda](https://calendar.google.com).
+2. Dans les paramètres de l'agenda dédié aux formations, copiez l'**Identifiant de l'agenda** (ex: `c_xxxxxx@group.calendar.google.com`).
+3. Assurez-vous que le compte Google qui exécute le script dispose des droits d'accès **"Modifier les événements"** sur cet agenda.
 
 ---
 
-## 6. Génération des Convocations PDF & Envois d'E-mails
-
-Lors de la validation d'une inscription :
-1. Le service [src/services/PdfService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/PdfService.ts) copie le modèle Google Docs référencé dans `PARAMETRES`, remplace les balises (Nom, Prénom, Session, Date, Heure, Lien Meet) puis convertit le document en PDF.
-2. Le fichier PDF est sauvegardé dans le dossier Google Drive défini dans `PARAMETRES` et son lien est archivé dans l'onglet `GED`.
-3. Le service [src/services/MailService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/MailService.ts) expédie la convocation avec le PDF en pièce jointe ainsi qu'un lien personnalisé de désinscription.
+### Étape 4 : Préparation du Modèle de Convocation PDF & Dossier Drive
+1. Créez un modèle de convocation au format Google Docs dans votre Google Drive.
+2. Intégrez-y les balises entre crochets qui seront remplacées dynamiquement : `[NOM]`, `[PRENOM]`, `[DATE]`, `[HEURE_DEBUT]`, `[HEURE_FIN]`, `[LIEU]`, `[LIEN_MEET]`.
+3. Copiez l'ID du Google Docs modèle ainsi que l'ID du dossier Google Drive cible recevant les convocations PDF générées.
 
 ---
 
-## 7. Catalogue WebApp Dynamique
-
-Le catalogue interactif est hébergé via Google Apps Script (fichiers [src/web/WebApp.ts](file:///c:/Project/Leroy-Merlin-Project/src/web/WebApp.ts) et [src/web/CatalogTemplate.html](file:///c:/Project/Leroy-Merlin-Project/src/web/CatalogTemplate.html)).
-
-![Catalogue Public WebApp](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785226539788.png)
-
-* **Règles d'affichage des places** :
-  - S'il reste **1 place** disponible : la carte affiche la mention exacte `Plus que 1 place.` *(au singulier)*.
-  - S'il reste **2 places ou plus** : la carte affiche `Plus que X places.` *(au pluriel)*.
-* **Couleurs dynamiques** : La couleur d'en-tête et du bouton d'inscription s'adapte à la thématique de la formation enregistrée dans la feuille `SESSIONS`.
+### Étape 5 : Installation des Déclencheurs (Triggers)
+1. Ouvrez votre classeur Google Sheets.
+2. Dans la barre de menu supérieure, cliquez sur **NUMERICOACH** > **Installer / Réinitialiser les déclencheurs (Triggers)**.
+3. Autorisez les permissions Google Apps Script demandées.
 
 ---
 
-## 8. Procédures d'Administration & Menu NUMERICOACH
+## 3. Description Détaillée des Onglets Google Sheets
 
-Un menu sur-mesure intitulé **NUMERICOACH** est présent dans la barre supérieure du classeur Google Sheets.
+### A. Onglet `SESSIONS`
+C'est l'onglet de pilotage des formations. Vous devez y saisir chaque session de formation.
 
-### Actions disponibles dans le menu :
+| Colonne | Nom de l'En-tête | Rôle & Format |
+| :--- | :--- | :--- |
+| **Col A** | `ID SESSION` | Identifiant unique généré (ex: `SES-0001`, `SES-0002`). |
+| **Col B** | `FORMATION` | Nom du module de formation (ex: `Gemini 2H30`). |
+| **Col C** | `DATE` | Date de la session (Format `JJ/MM/AAAA`). |
+| **Col D** | `HEURE DEBUT` | Heure de début (ex: `09:00`). |
+| **Col E** | `HEURE FIN` | Heure de fin (ex: `11:30`). |
+| **Col H** | `NB DE PLACES` | Capacité maximale de la session (ex: `4`). |
+| **Col K** | `Publier` | Case à cocher. Cochez `TRUE` pour publier la session sur le catalogue et les formulaires. |
+| **Col L** | `Nb Inscrits` | Calculé automatiquement par le script. |
+| **Col M** | `Places Restantes` | Calculé par la formule `=Col H - Col L`. |
 
-1. **`Mettre à jour les sessions dans le Formulaire`** :
-   Recalcule les places et met à jour instantanément la liste des créneaux dans les 3 formulaires Google Forms.
-
-2. **`Installer / Réinitialiser les déclencheurs (Triggers)`** :
-   Recrée les déclencheurs automatiques Google Apps Script en cas de perte de synchronisation des formulaires ou d'édition.
-
-3. **`Retraiter les inscriptions non traitées`** :
-   Permet d'exécuter un traitement de rattrapage sur l'onglet `INSCRIPTIONSS` si des soumissions n'ont pas pu être traitées suite à un incident réseau Google.
+📷 **[EMPLACEMENT CAPTURE N°3 : Onglet SESSIONS]**  
+*👉 Insérez ici une capture du tableau de l'onglet SESSIONS avec des lignes de sessions saisies et des cases cochées dans la colonne Publier.*
 
 ---
 
-## 9. Guide de Déploiement & Maintenance Technique
+### B. Onglet `PARAMETRES`
+Cet onglet contient l'ensemble des clés de configuration utilisées par les automatismes.
 
-Pour apporter des modifications au code source du projet :
+📷 **[EMPLACEMENT CAPTURE N°4 : Onglet PARAMETRES]**  
+*👉 Insérez ici une capture complète de l'onglet PARAMETRES montrant la colonne B (Clé) et la colonne C (Valeur).*
 
-1. **Ouvrir le projet dans VS Code** :
-   Rendez-vous dans le répertoire `c:\Project\Leroy-Merlin-Project`.
+---
 
-2. **Modifier le code TypeScript ou HTML** :
-   Toutes les sources se trouvent sous le répertoire `src/`.
+## 4. Référentiel des Paramètres Système (Onglet `PARAMETRES`)
 
-3. **Compiler et déployer sur Google Apps Script** :
-   Exécutez la commande suivante dans le terminal :
-   ```bash
-   npm run push
-   ```
-   *Cette commande compile le code TypeScript en JavaScript dans le dossier `dist/` puis effectue un `clasp push --force` vers le projet Google Apps Script lié.*
+Voici le tableau exhaustif des paramètres requis dans la feuille `PARAMETRES` :
 
-4. **Vérification dans Google Apps Script** :
-   Rendez-vous sur la console Apps Script pour vérifier que la dernière version a bien été poussée sans erreur.
+| Clé (Colonne B) | Description & Instructions | Exemple de Valeur (Colonne C) |
+| :--- | :--- | :--- |
+| `ID Agenda >` | Identifiant de l'agenda Google récepteur. | `c_7da3b16909fd...@group.calendar.google.com` |
+| `Mail Expediteur` | Adresse e-mail utilisée pour l'envoi des convocations. | `thierry.vanoffe@ext.leroymerlin.fr` |
+| `Id Form Edit Inscriptions` | ID d'Édition du Google Form Inscription. | `1LOsvh4spCORP-xkR8dhTFlYvmXtXRvjNnYkTrmJCbQo` |
+| `Id Form Edit Liste Attente` | ID d'Édition du Google Form Liste d'Attente. | `1KzGeU5UDYmUlw8EgeT1GrGCldZZPbHpc7ZPGpinssk` |
+| `Id Form Edit Desinscription` | ID d'Édition du Google Form Désinscription. | `1UIYYprxFckHFDQYeARtj1An08k0nTUZ6hhA6TRSI0` |
+| `ID du docs Modèle de convocation >` | ID du fichier Google Docs modèle. | `1bJfgjsants-waATPS9Ks5C9ctPG6cu0BKopr5Ek0Gw0` |
+| `ID du dossier recueillant les convocations >` | ID du dossier Google Drive cible. | `1N0Vipl0kto3RhcDW-3AAD-8IDfIZqqfB` |
+
+---
+
+## 5. Fonctionnement des Automatismes & Services
+
+### 1. Synchronisation des Formulaires (`updateFormChoices`)
+Dès que vous modifiez une session dans l'onglet `SESSIONS` ou que vous cliquez sur le menu de mise à jour :
+- Le script analyse les places disponibles.
+- Le formulaire **Inscription** est mis à jour avec les sessions publiées ayant au moins 1 place libre.
+- Les formulaires **Liste d'Attente** et **Désinscription** sont mis à jour avec la totalité des sessions publiées.
+- Les questions de type **Liste déroulante**, **Choix multiple** et **Cases à cocher** sont gérées automatiquement.
+
+📷 **[EMPLACEMENT CAPTURE N°5 : Formulaire d'Inscription à jour]**  
+*👉 Insérez ici une capture de votre formulaire d'inscription Google Forms montrant la liste des sessions à jour.*
+
+---
+
+### 2. Gestion de l'Agenda Google (`AgendaService`)
+Lorsqu'un participant s'inscrit :
+- L'événement correspondant à la session est recherché ou créé dans Google Agenda.
+- Un lien **Google Meet** est généré.
+- Le titre de l'événement s'actualise avec le nombre d'inscrits :  
+  - `(1 participant) Gemini 2H30 [SES-0002]`
+  - `(3 participants) Gemini 2H30 [SES-0002]`
+- La description de l'événement est enrichie avec la liste nominative complète des participants.
+- L'invité reçoit la notification Google Calendar.
+
+---
+
+### 3. Catalogue WebApp (`CatalogTemplate.html`)
+L'application Web affiche les cartes de formations en direct :
+- Si 1 seule place est disponible ➔ `Plus que 1 place.` *(Gestion dynamique du singulier)*.
+- Si 2 places ou plus ➔ `Plus que 2 places.` *(Gestion dynamique du pluriel)*.
+
+📷 **[EMPLACEMENT CAPTURE N°6 : Catalogue WebApp Public]**  
+*👉 Insérez ici une capture du catalogue WebApp montrant les cartes de sessions colorées.*
+
+---
+
+## 6. Guide d'Utilisation du Menu Administrateur NUMERICOACH
+
+Dans la barre supérieure de votre classeur Google Sheets, vous disposez du menu **NUMERICOACH** :
+
+1. **`Mettre à jour les sessions dans le Formulaire`** :  
+   À exécuter après la saisie de nouvelles sessions pour forcer la synchronisation immédiate des 3 formulaires.
+2. **`Synchroniser les événements Agenda`** :  
+   Permet de vérifier et de créer l'ensemble des créneaux dans Google Agenda.
+3. **`Installer / Réinitialiser les déclencheurs (Triggers)`** :  
+   À exécuter si une soumission de formulaire ne déclenche plus l'envoi d'e-mail.
+4. **`Retraiter les inscriptions non traitées`** :  
+   Permet de relancer l'envoi des convocations pour les inscriptions enregistrées lors d'une panne réseau.
+5. **`Générer les Documentations (Google Docs)`** :  
+   Crée automatiquement les deux guides officiels au format Google Docs dans votre Google Drive.
+
+---
+
+## 7. Dépannage & Résolution des Incidents Courants
+
+| Symptôme | Cause Probable | Solution Administrateur |
+| :--- | :--- | :--- |
+| **Notification `0 formulaire(s) mis à jour`** | L'ID présent dans `PARAMETRES` est le lien public (`/viewform`) au lieu de l'ID d'Édition. | Ouvrez le formulaire en mode édition, copiez l'ID présent dans l'URL `/edit` et collez-le dans la feuille `PARAMETRES`. |
+| **Les événements n'apparaissent pas dans Google Agenda** | Le compte Google exécutant le script n'a pas les droits sur l'agenda cible. | Dans Google Agenda, partagez l'agenda avec l'adresse e-mail de l'administrateur en donnant l'autorisation *"Modifier les événements"*. |
+| **E-mail de confirmation non reçu** | Le déclencheur `onFormSubmit` s'est désactivé suite à une mise à jour. | Rendez-vous sur le menu **NUMERICOACH** > **Installer / Réinitialiser les déclencheurs**. |

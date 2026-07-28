@@ -1,95 +1,109 @@
-# Guide Utilisateur - Inscription aux Formations Leroy Merlin x Numericoach
+# 📗 Guide Utilisateur - Inscriptions aux Formations Leroy Merlin x Numericoach
 
-Bienvenue dans le guide utilisateur relatif au système d'inscription aux formations Leroy Merlin. Ce document vous explique pas à pas comment consulter le catalogue des sessions, vous inscrire, recevoir votre convocation et gérer votre participation.
+Bienvenue dans votre guide utilisateur relatif au système d'inscription aux formations Leroy Merlin. Ce document vous explique pas à pas comment consulter les sessions disponibles, valider votre inscription, recevoir votre convocation et gérer votre participation.
 
 ---
 
 ## 📋 Table des Matières
-1. [Consultation du Catalogue de Formations](#1-consultation-du-catalogue-de-formations)
-2. [Procédure d'Inscription à une Session](#2-procédure-dinscription-à-une-session)
-3. [Réception de la Convocation & Invitation Google Agenda](#3-réception-de-la-convocation--invitation-google-agenda)
-4. [Inscription sur Liste d'Attente (Session Complète)](#4-inscription-sur-liste-dattente-session-complète)
-5. [Procédure de Désinscription / Annulation](#5-procédure-de-désinscription--annulation)
-6. [F.A.Q & Support Technique](#6-faq--support-technique)
+1. [Consultation du Catalogue de Formations en Ligne](#1-consultation-du-catalogue-de-formations-en-ligne)
+2. [Procédure d'Inscription Pas à Pas](#2-procédure-dinscription-pas-à-pas)
+3. [Réception de la Convocation PDF & Invitation Google Agenda](#3-réception-de-la-convocation-pdf--invitation-google-agenda)
+4. [Gestion d'une Session Complète (Liste d'Attente)](#4-gestion-dune-session-complète-liste-dattente)
+5. [Procédure d'Annulation / Désinscription](#5-procédure-dannulation--désinscription)
+6. [Foire Aux Questions (F.A.Q) & Support](#6-foire-aux-questions-faq--support)
 
 ---
 
-## 1. Consultation du Catalogue de Formations
+## 1. Consultation du Catalogue de Formations en Ligne
 
-Pour visualiser l'ensemble des sessions de formation disponibles, vous devez vous rendre sur le catalogue en ligne de l'application Web.
+Pour visualiser l'ensemble des formations ouvertes, vous devez vous rendre sur l'application Web du catalogue.
 
-![Catalogue des Formations en Ligne](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785226539788.png)
+📷 **[EMPLACEMENT CAPTURE N°1 : Catalogue des Formations en Ligne]**  
+*👉 Insérez ici une capture de l'écran d'accueil du catalogue WebApp montrant les différentes cartes de formations.*
 
-Sur ce catalogue, vous pouvez consulter pour chaque session :
-* **Le titre et la thématique** (ex: *Gemini 2H30*, *Gemini 1H30*).
-* **La date et l'horaire précis** du déroulement de la formation.
-* **Le lieu ou la modalité** (Distanciel, Présentiel).
-* **Le nombre de places restantes disponibles** en temps réel (ex: *Plus que 1 place.* ou *Plus que 4 places.*).
-
----
-
-## 2. Procédure d'Inscription à une Session
-
-Pour procéder à votre inscription :
-
-1. **Rendez-vous sur le catalogue WebApp ou sur le formulaire d'inscription**.
-2. **Cliquez sur le bouton "Je m'inscris"** sous la fiche de la session souhaitée.
-3. Vous serez automatiquement redirigé vers le formulaire d'inscription Google Forms.
-4. **Renseignez vos informations personnelles et professionnelles** :
-   - Votre Nom et Prénom.
-   - Votre adresse e-mail professionnelle Leroy Merlin (`@ext.leroymerlin.fr` ou `@leroymerlin.fr`).
-   - Votre Magasin ou Service d'appartenance.
-   - Le nombre de participants que vous inscrivez.
-5. **Sélectionnez le créneau de votre choix** dans la liste des sessions disponibles.
-6. **Validez le formulaire** en cliquant sur le bouton **Envoyer**.
+Sur chaque carte de formation, vous devez prêter attention aux informations suivantes :
+- **L'intitulé du module** (ex: *Gemini 2H30*, *Gemini 1H30*).
+- **La date et l'horaire exacts** du déroulement de la session.
+- **La modalité et le lieu** (ex: *Distanciel*, *Présentiel*).
+- **Le nombre de places restantes disponibles** :  
+  - Mention `Plus que 1 place.` *(s'il ne reste qu'une seule place disponible)*.
+  - Mention `Plus que X places.` *(s'il reste 2 places ou plus)*.
 
 ---
 
-## 3. Réception de la Convocation & Invitation Google Agenda
+## 2. Procédure d'Inscription Pas à Pas
+
+Lorsque vous avez choisi la formation à laquelle vous souhaitez participer :
+
+1. **Cliquez sur le bouton "Je m'inscris"** situé au bas de la carte de la session sur le catalogue WebApp.
+2. Vous êtes automatiquement redirigé vers le formulaire d'inscription Google Forms.
+
+📷 **[EMPLACEMENT CAPTURE N°2 : Formulaire d'Inscription Google Forms]**  
+*👉 Insérez ici une capture du formulaire d'inscription avec les champs Nom, Prénom et Liste des sessions.*
+
+3. **Renseignez attentivement vos informations professionnelles** :
+   - Your **Nom** et **Prénom**.
+   - Your **Adresse e-mail professionnelle Leroy Merlin** (`@ext.leroymerlin.fr` ou `@leroymerlin.fr`).
+   - Your **Magasin ou Service** de rattachement.
+   - Le **Nombre de participants** que vous inscrivez.
+4. **Sélectionnez votre session** dans la liste des créneaux proposés.
+5. **Cliquez sur le bouton "Envoyer"** pour valider définitivement votre inscription.
+
+---
+
+## 3. Réception de la Convocation PDF & Invitation Google Agenda
 
 Dès que votre inscription est enregistrée par le système :
 
 1. **E-mail de confirmation instantané** :  
-   Vous recevez un e-mail officiel de confirmation envoyé par le service Formation.
+   Un e-mail de confirmation automatique vous est envoyé par le service Formation.
 2. **Convocation PDF en pièce jointe** :  
-   Votre convocation officielle nominative au format PDF est rattachée à cet e-mail. Elle récapitule les détails pratiques de votre formation.
-3. **Invitation Google Agenda automatique** :  
-   Un événement Google Agenda est directement ajouté à votre calendrier.
-   - Il contient le **lien de visioconférence Google Meet** pour rejoindre la session le jour J.
-   - Il est recommandé de vous connecter 5 minutes avant le début de la session.
+   Votre convocation officielle au format PDF est rattachée à cet e-mail. Vous devez la télécharger et la conserver.
+3. **Ajout à votre Google Agenda** :  
+   Un événement est automatiquement ajouté à votre agenda professionnel.
+   - Il contient le **lien de visioconférence Google Meet** pour vous connecter le jour J.
+   - Il est recommandé de cliquer sur le lien Meet 5 minutes avant le début du cours.
 
 ---
 
-## 4. Inscription sur Liste d'Attente (Session Complète)
+## 4. Gestion d'une Session Complète (Liste d'Attente)
 
-Si la session que vous souhaitez suivre affiche complet sur le catalogue :
+Si la session que vous convoitez n'apparaît plus sur le formulaire d'inscription car elle est complète :
 
-1. Vous pouvez cliquer sur le lien de la **Liste d'attente**.
-2. Remplissez le formulaire de liste d'attente en indiquant la session souhaitée.
+1. Cliquez sur le lien vers le **Formulaire de Liste d'Attente**.
 
-![Formulaire de Liste d'Attente](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785238995373.png)
+📷 **[EMPLACEMENT CAPTURE N°3 : Formulaire de Liste d'Attente]**  
+*👉 Insérez ici une capture du formulaire de Liste d'Attente.*
 
-3. En cas de désistement d'un participant ou d'ouverture d'un nouveau créneau, vous serez contacté en priorité pour valider votre place.
-
----
-
-## 5. Procédure de Désinscription / Annulation
-
-En cas d'imprévu ou d'indisponibilité, vous devez annuler votre participation le plus tôt possible afin de libérer votre place pour un collègue.
-
-![Formulaire de Désinscription](file:///C:/Users/Arthu/.gemini/antigravity-ide/brain/9ff38e37-2448-4fa8-bb45-69f018aa355c/media__1785238733259.png)
-
-1. Ouvrez l'e-mail de confirmation de votre convocation.
-2. Cliquez sur le lien **"Se désinscrire de cette session"** situé au bas de l'e-mail.
-3. Vous serez redirigé vers le formulaire de désinscription pré-rempli.
-4. Cochez la session concernée et indiquez le motif de votre annulation si souhaité.
-5. Validez la désinscription : vous serez automatiquement retiré de l'événement Google Agenda et la place sera remise en disponibilité immédiatement.
+2. Remplissez le formulaire en sélectionnant la session complète pour laquelle vous souhaitez être alerté.
+3. En cas de désistement d'un participant, vous serez contacté en priorité par l'équipe formation pour valider votre inscription.
 
 ---
 
-## 6. F.A.Q & Support Technique
+## 5. Procédure d'Annulation / Désinscription
 
-- **Je n'ai pas reçu mon e-mail de confirmation ou ma convocation PDF** :  
-  Vérifiez dans votre dossier Courriers indésirables / Spams. Si le problème persiste, contactez votre responsable formation.
-- **Le lien Google Meet n'apparaît pas dans mon calendrier** :  
-  Ouvrez l'événement dans votre Google Agenda et vérifiez la rubrique "Rejoindre avec Google Meet". Le lien est également rappelé dans le corps de votre e-mail de confirmation.
+Si vous avez un empêchement professionnel ou personnel, vous devez impérativement annuler votre inscription pour libérer votre place.
+
+📷 **[EMPLACEMENT CAPTURE N°4 : Formulaire de Désinscription]**  
+*👉 Insérez ici une capture du formulaire de désinscription pré-rempli.*
+
+### Procédure d'annulation :
+1. Ouvrez l'e-mail de confirmation que vous avez reçu lors de votre inscription.
+2. Rendez-vous au bas du message et cliquez sur le lien **"Se désinscrire de cette session"**.
+3. Le formulaire de désinscription pré-rempli s'ouvre.
+4. Cochez la session que vous souhaitez annuler.
+5. Validez le formulaire en cliquant sur **Envoyer**.
+6. Vous êtes immédiatement retiré de l'événement Google Agenda et la place est remise en disponibilité sur le catalogue pour vos collègues.
+
+---
+
+## 6. Foire Aux Questions (F.A.Q) & Support
+
+- **Où puis-je retrouver le lien Google Meet de ma formation ?**  
+  Le lien Google Meet est présent dans le corps de votre e-mail de confirmation, dans votre convocation PDF ainsi que dans le détail de l'événement dans votre Google Agenda.
+
+- **Puis-je inscrire plusieurs collègues en même temps ?**  
+  Oui, il vous suffit d'indiquer le nombre total de personnes dans le champ *"Nombre de participants à la formation"* lors de votre inscription.
+
+- **Comment modifier la date de ma session ?**  
+  Vous devez d'abord vous désinscrire de la première session via le lien présent dans votre e-mail de confirmation, puis vous réinscrire sur le nouveau créneau souhaité via le catalogue.
