@@ -208,16 +208,23 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       return null;
     }
 
-    // 1. Vérifier si l'événement existe déjà dans la BDD Sheets
+    // 1. Vérifier si l'événement existe déjà spécifiquement dans l'agenda cible actuel
     const lastRowEvt = sheetSessionEvenements.getLastRow();
     if (lastRowEvt >= 2) {
       const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
-      for (let i = 0; i < sessionEvenementValues.length; i++) {
+      for (let i = sessionEvenementValues.length - 1; i >= 0; i--) {
         if (sessionEvenementValues[i][1] === sessionId) {
           const storedId = sessionEvenementValues[i][2] as string;
           if (storedId) {
-            // Vérifier que l'événement existe bien toujours dans Google Agenda
-            const existingEvent = getEventByIdRobust(storedId);
+            let existingEvent: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+            try {
+              existingEvent = agenda.getEventById(storedId);
+            } catch (e) {}
+            if (!existingEvent && storedId.indexOf("@") === -1) {
+              try {
+                existingEvent = agenda.getEventById(storedId + "@google.com");
+              } catch (e) {}
+            }
             if (existingEvent) {
               return storedId;
             }
