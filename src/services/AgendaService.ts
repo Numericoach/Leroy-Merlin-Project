@@ -449,7 +449,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     if (sheetSessions) {
       const lastRow = sheetSessions.getLastRow();
       if (lastRow >= 2) {
-        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+        let cleanTitle = "Accompagnement Leroy Merlin [" + sessionId + "]";
         for (let i = 0; i < sessionsValues.length; i++) {
           if (sessionsValues[i][0] === sessionId) {
             formationTitle = sessionsValues[i][13] || sessionsValues[i][1] || formationTitle;
@@ -457,8 +457,16 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
             const sessionModuleColC = sessionsValues[i][1] || "";
             const sessionModuleColO = sessionsValues[i][13] || "";
             const cleanFormTitle = getCleanFormationTitle(sessionModuleColO, sessionModuleColC);
-            const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
-    
+            cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
+            break;
+          }
+        }
+      }
+    }
+
+    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
+    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+
     const meetUrl = getMeetUrlForSession(sessionId);
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
