@@ -4,11 +4,13 @@
 function getTargetCalendar(): GoogleAppsScript.Calendar.Calendar | null {
   const agendaId = getParamValue("PARAMETRE_ID_AGENDA");
   if (agendaId && agendaId.trim() !== "") {
+    const cleanId = agendaId.trim();
     try {
-      const agenda = CalendarApp.getCalendarById(agendaId.trim());
+      const agenda = CalendarApp.getCalendarById(cleanId);
       if (agenda) return agenda;
+      Logger.log("ATTENTION : L'agenda Google ID '" + cleanId + "' est introuvable ou n'est pas partagé avec le compte exécutant le script (Droits de modification requis).");
     } catch (err) {
-      Logger.log("Avertissement getCalendarById(" + agendaId + ") : " + err + ". Utilisation de l'agenda principal.");
+      Logger.log("Avertissement getCalendarById(" + cleanId + ") : " + err + ". Utilisation de l'agenda principal.");
     }
   }
   try {
