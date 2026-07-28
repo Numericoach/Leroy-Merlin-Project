@@ -52,6 +52,48 @@ function getCleanFormationTitle(rawTitle: string): string {
 }
 
 /**
+ * Extrait le lien Google Meet configuré pour une session (depuis LIEUX ou lien distanciel par défaut)
+ */
+function getMeetUrlForSession(sessionId: string): string {
+  try {
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    if (sheetSessions) {
+      const lastRow = sheetSessions.getLastRow();
+      if (lastRow >= 2) {
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+        for (let i = 0; i < sessionsValues.length; i++) {
+          if (sessionsValues[i][0] === sessionId) {
+            const lieuStr = (sessionsValues[i][6] || sessionsValues[i][7] || "").toString();
+            const match = lieuStr.match(/\[(.*?)\]/);
+            if (match && match[1]) {
+              const lieuId = match[1];
+              const sheetLieux = ss ? ss.getSheetByName("LIEUX") : null;
+              if (sheetLieux) {
+                const maxLieux = sheetLieux.getLastRow();
+                if (maxLieux >= 2) {
+                  const lieuxData = sheetLieux.getRange(2, 2, maxLieux - 1, 7).getValues();
+                  for (let j = 0; j < lieuxData.length; j++) {
+                    if (lieuxData[j][0] === lieuId) {
+                      const addr = (lieuxData[j][2] || "").toString();
+                      const acces = (lieuxData[j][5] || "").toString();
+                      if (addr.indexOf("meet.google.com") > -1) return addr;
+                      const meetMatch = acces.match(/(https:\/\/meet\.google\.com\/[a-z0-9\-]+)/i);
+                      if (meetMatch) return meetMatch[1];
+                    }
+                  }
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return "https://meet.google.com/apv-qoem-zpc";
+}
+
+/**
  * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
  */
 function getOrCreateSessionEventId(sessionId: string): string | null {
@@ -144,8 +186,11 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const eventTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
+    const meetUrl = getMeetUrlForSession(sessionId);
+    const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
-    const description = textAgenda
+    const description = meetHeader
+      + textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo
       + "<p>Programme de l'accompagnement :</p>" + formationCompetences;
@@ -355,13 +400,8 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const cleanFormTitle = getCleanFormationTitle(formationTitle);
     const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     
-    let meetHeader = "";
-    try {
-      const hangout = event.getHangoutLink();
-      if (hangout) {
-        meetHeader = "<b>📹 Visioconférence Google Meet :</b> <a href='" + hangout + "'>" + hangout + "</a><p></p>";
-      }
-    } catch (e) {}
+    const meetUrl = getMeetUrlForSession(sessionId);
+    const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
 
     const newDescription = meetHeader
       + textAgenda
