@@ -190,15 +190,15 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     adresseLieu, cpLieu, villeLieu, infoCompStr
   );
 
-  const subject = "Convocation & confirmation d'inscription - Formation Leroy Merlin [" + sessionId + "]";
+  const subject = "Convocation & confirmation d'inscription - Accompagnement Leroy Merlin [" + sessionId + "]";
   
   let htmlBody = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>"
     + "<div style='background-color: #78BE20; padding: 20px; text-align: center; color: white;'>"
-    + "<h2 style='margin: 0; font-weight: bold;'>Confirmation & convocation de formation</h2>"
+    + "<h2 style='margin: 0; font-weight: bold;'>Confirmation & convocation d'accompagnement</h2>"
     + "</div>"
     + "<div style='padding: 24px;'>"
     + "<p>Bonjour " + (prenom ? prenom + " " + (nom || "") : "") + ",</p>"
-    + "<p>Votre inscription à la session de formation <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
+    + "<p>Votre inscription à la session d'accompagnement <b>" + formationTitle + " [" + sessionId + "]</b> a bien été confirmée.</p>"
     + "<p><b>Invitation Agenda :</b> Une invitation Google Agenda contenant la date, l'heure et le lien de connexion vous a été envoyée.</p>"
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
@@ -216,7 +216,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
         const startIso = y + m + d + "T090000Z";
         const endIso = y + m + d + "T113000Z";
         googleCalUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" 
-          + encodeURIComponent("Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]")
+          + encodeURIComponent("Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]")
           + "&dates=" + startIso + "/" + endIso
           + "&details=" + encodeURIComponent("Session " + sessionId + "\n\nInformations : " + connexionInfo)
           + "&location=" + encodeURIComponent(lieuStr || "En ligne / Distanciel");

@@ -126,21 +126,39 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
     const dateFin = parseDateTime(targetSession[2], targetSession[4]);
 
-    const eventTitle = "Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const eventTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
     const description = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo
-      + "<p>Programme de la formation :</p>" + formationCompetences;
+      + "<p>Programme de l'accompagnement :</p>" + formationCompetences;
 
     const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
     newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
 
+    // Activer automatiquement la visioconférence Google Meet si disponible via Calendar v3
+    try {
+      const calendarId = agenda.getId();
+      const cleanEvtId = newEvent.getId().replace("@google.com", "");
+      if (typeof (globalThis as any).Calendar !== "undefined" && (globalThis as any).Calendar.Events) {
+        (globalThis as any).Calendar.Events.patch({
+          conferenceData: {
+            createRequest: {
+              requestId: Utilities.getUuid(),
+              conferenceSolutionKey: { type: "hangoutsMeet" }
+            }
+          }
+        }, calendarId, cleanEvtId, { conferenceDataVersion: 1 });
+      }
+    } catch (meetErr) {
+      Logger.log("Information création visioconférence Google Meet : " + meetErr);
+    }
+
     const newEventId = newEvent.getId();
     sheetSessionEvenements.appendRow([new Date(), sessionId, newEventId]);
-    Logger.log("Nouvel événement créé pour la session : " + sessionId + " (ID: " + newEventId + ")");
+    Logger.log("Créneau d'accompagnement pré-réservé dans Google Agenda : " + sessionId + " (ID: " + newEventId + ")");
 
     return newEventId;
   } catch (err) {
@@ -305,21 +323,21 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
-    // 3. Appliquer le titre au format [X participants] et description détaillée
-    const newTitle = "[" + totalParticipants + " participants] Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    // 3. Titre propre (sans [X participants]) et affichage du nombre + liste uniquement dans la description
+    const cleanTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
     
     const newDescription = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo
-      + "<p>Programme de la formation :</p>" + formationCompetences
+      + "<p>Programme de l'accompagnement :</p>" + formationCompetences
       + "<br><hr><br>"
-      + "<h3>👤 Directeurs inscrits et participants (" + totalParticipants + ") :</h3>"
+      + "<h3>👤 Inscrits et participants (Total : " + totalParticipants + ") :</h3>"
       + "<ul>" + participantListHtml + "</ul>";
 
-    event.setTitle(newTitle);
+    event.setTitle(cleanTitle);
     event.setDescription(newDescription);
     
-    Logger.log("Événement Agenda mis à jour avec succès : " + newTitle);
+    Logger.log("Événement Agenda mis à jour avec succès (description enrichie) : " + cleanTitle);
     return true;
   } catch (err) {
     Logger.log("Erreur lors de la mise à jour des détails de l'événement Agenda : " + err);
@@ -353,12 +371,12 @@ function resetEventToDefault(event: GoogleAppsScript.Calendar.CalendarEvent, ses
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
     
-    const newTitle = "[0 participant] Formation Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const cleanTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
     const newDescription = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo;
       
-    event.setTitle(newTitle);
+    event.setTitle(cleanTitle);
     event.setDescription(newDescription);
   } catch (e) {
     Logger.log("Erreur lors de la réinitialisation de l'événement : " + e);
