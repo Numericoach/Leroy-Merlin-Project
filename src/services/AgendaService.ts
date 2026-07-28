@@ -40,17 +40,80 @@ function getEventByIdRobust(eventId: string): GoogleAppsScript.Calendar.Calendar
 /**
  * Nettoie le titre du module pour éviter la répétition 'Accompagnement Leroy Merlin - Formation Leroy Merlin'
  */
-function getCleanFormationTitle(rawTitle: string): string {
-  if (!rawTitle) return "";
-  let cleaned = rawTitle
+function getCleanFormationTitle(rawTitle: string, fallbackModule: string = ""): string {
+  let str = (rawTitle || "").toString().trim();
+  if (!str || str.toLowerCase() === "formation leroy merlin" || str.toLowerCase() === "accompagnement leroy merlin") {
+    str = (fallbackModule || "").toString().trim();
+  }
+  
+  let cleaned = str
     .replace(/\[FOR-.*?\]/gi, "")
     .replace(/^Accompagnement Leroy Merlin\s*-\s*/i, "")
     .replace(/^Accompagnement Leroy Merlin/i, "")
     .replace(/^Formation Leroy Merlin\s*-\s*/i, "")
     .replace(/^Formation Leroy Merlin/i, "")
-    .replace(/^Formation\s*/i, "")
+    .replace(/^Formation\s+/i, "")
     .trim();
-  return cleaned || rawTitle;
+
+  if (!cleaned || cleaned.toLowerCase() === "formation leroy merlin" || cleaned.toLowerCase() === "accompagnement leroy merlin") {
+    if (fallbackModule) {
+      cleaned = fallbackModule
+        .replace(/\[FOR-.*?\]/gi, "")
+        .replace(/^Accompagnement Leroy Merlin\s*-\s*/i, "")
+        .replace(/^Accompagnement Leroy Merlin/i, "")
+        .replace(/^Formation Leroy Merlin\s*-\s*/i, "")
+        .replace(/^Formation Leroy Merlin/i, "")
+        .replace(/^Formation\s+/i, "")
+        .trim();
+    }
+  }
+
+  if (cleaned.toLowerCase() === "formation leroy merlin" || cleaned.toLowerCase() === "accompagnement leroy merlin") {
+    cleaned = "";
+  }
+
+  return cleaned;
+}
+
+/**
+ * Extrait le nombre de participants spécifié dans la réponse du formulaire pour cet e-mail
+ */
+function getNbParticipantsForEmailAndSession(sessionId: string, email: string): number {
+  if (!ss) return 1;
+  const cleanEmail = (email || "").toLowerCase().trim();
+  if (!cleanEmail) return 1;
+  
+  try {
+    const sheets = ss.getSheets();
+    for (let s = 0; s < sheets.length; s++) {
+      const name = sheets[s].getName();
+      if (name.indexOf("Form") > -1 || name.indexOf("Réponses") > -1 || name.indexOf("Form_Responses") > -1) {
+        const lastRow = sheets[s].getLastRow();
+        const lastCol = sheets[s].getLastColumn();
+        if (lastRow >= 2 && lastCol >= 2) {
+          const headers = sheets[s].getRange(1, 1, 1, lastCol).getValues()[0].map(h => (h || "").toString().toLowerCase());
+          const emailColIdx = headers.findIndex(h => h.indexOf("mail") > -1 || h.indexOf("email") > -1 || h.indexOf("courriel") > -1);
+          const nbColIdx = headers.findIndex(h => h.indexOf("nombre") > -1 || h.indexOf("combien") > -1 || h.indexOf("participant") > -1);
+          
+          if (emailColIdx > -1) {
+            const values = sheets[s].getRange(2, 1, lastRow - 1, lastCol).getValues();
+            for (let r = values.length - 1; r >= 0; r--) {
+              const rowEmail = (values[r][emailColIdx] || "").toString().toLowerCase().trim();
+              if (rowEmail === cleanEmail) {
+                if (nbColIdx > -1 && values[r][nbColIdx] !== undefined && values[r][nbColIdx] !== null && values[r][nbColIdx] !== "") {
+                  const parsed = parseInt(values[r][nbColIdx].toString(), 10);
+                  if (!isNaN(parsed) && parsed > 0) return parsed;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Erreur lors de la lecture du nombre de participants : " + e);
+  }
+  return 1;
 }
 
 /**
@@ -190,7 +253,9 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
     const dateFin = parseDateTime(targetSession[2], targetSession[4]);
 
-    const cleanFormTitle = getCleanFormationTitle(formationTitle);
+    const sessionModuleColC = targetSession[1] || "";
+    const sessionModuleColO = targetSession[13] || "";
+    const cleanFormTitle = getCleanFormationTitle(sessionModuleColO, sessionModuleColC);
     const eventTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
@@ -361,13 +426,7 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
       const nom = (row[5] || "").toString().trim();
       const magasin = (row[6] || "").toString().trim();
       
-      let nbPart = 1;
-      if (row[7] !== undefined && row[7] !== "") {
-        const parsed = parseInt(row[7].toString(), 10);
-        if (!isNaN(parsed) && parsed > 0) {
-          nbPart = parsed;
-        }
-      }
+      let nbPart = getNbParticipantsForEmailAndSession(sessionId, email);
       
       totalParticipants += nbPart;
       
@@ -390,23 +449,15 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     if (sheetSessions) {
       const lastRow = sheetSessions.getLastRow();
       if (lastRow >= 2) {
-        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 13).getValues();
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
         for (let i = 0; i < sessionsValues.length; i++) {
           if (sessionsValues[i][0] === sessionId) {
-            formationTitle = sessionsValues[i][13] || formationTitle;
+            formationTitle = sessionsValues[i][13] || sessionsValues[i][1] || formationTitle;
             formationDescription = sessionsValues[i][8] || "";
-            break;
-          }
-        }
-      }
-    }
-
-    const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
-    const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
-
-    // 3. Titre propre sans répétition et affichage des inscrits + lien Google Meet dans la description
-    const cleanFormTitle = getCleanFormationTitle(formationTitle);
-    const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
+            const sessionModuleColC = sessionsValues[i][1] || "";
+            const sessionModuleColO = sessionsValues[i][13] || "";
+            const cleanFormTitle = getCleanFormationTitle(sessionModuleColO, sessionModuleColC);
+            const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     
     const meetUrl = getMeetUrlForSession(sessionId);
     const meetHeader = meetUrl ? "<p style='font-size:14px;'>📹 <b>Visioconférence Google Meet :</b> <a href='" + meetUrl + "'>" + meetUrl + "</a></p><p></p>" : "";
