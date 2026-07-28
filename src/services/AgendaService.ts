@@ -38,6 +38,20 @@ function getEventByIdRobust(eventId: string): GoogleAppsScript.Calendar.Calendar
 }
 
 /**
+ * Nettoie le titre du module pour éviter la répétition 'Accompagnement Leroy Merlin - Formation Leroy Merlin'
+ */
+function getCleanFormationTitle(rawTitle: string): string {
+  if (!rawTitle) return "";
+  const cleaned = rawTitle
+    .replace(/^Accompagnement Leroy Merlin\s*-\s*/i, "")
+    .replace(/^Accompagnement Leroy Merlin/i, "")
+    .replace(/^Formation Leroy Merlin\s*-\s*/i, "")
+    .replace(/^Formation Leroy Merlin/i, "")
+    .trim();
+  return cleaned || rawTitle;
+}
+
+/**
  * Obtenir ou créer l'événement Google Agenda pour une session donnée (protégé par LockService)
  */
 function getOrCreateSessionEventId(sessionId: string): string | null {
@@ -126,7 +140,8 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
     const dateFin = parseDateTime(targetSession[2], targetSession[4]);
 
-    const eventTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const cleanFormTitle = getCleanFormationTitle(formationTitle);
+    const eventTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
@@ -138,12 +153,13 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
     newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
 
-    // Activer automatiquement la visioconférence Google Meet si disponible via Calendar v3
+    // Tenter la génération du lien Google Meet via l'API Calendar v3
+    let generatedMeetUrl = "";
     try {
-      const calendarId = agenda.getId();
+      const calendarId = agenda.getId() || "primary";
       const cleanEvtId = newEvent.getId().replace("@google.com", "");
       if (typeof (globalThis as any).Calendar !== "undefined" && (globalThis as any).Calendar.Events) {
-        (globalThis as any).Calendar.Events.patch({
+        const patched = (globalThis as any).Calendar.Events.patch({
           conferenceData: {
             createRequest: {
               requestId: Utilities.getUuid(),
@@ -151,9 +167,21 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
             }
           }
         }, calendarId, cleanEvtId, { conferenceDataVersion: 1 });
+
+        if (patched && patched.hangoutLink) {
+          generatedMeetUrl = patched.hangoutLink;
+        }
       }
     } catch (meetErr) {
       Logger.log("Information création visioconférence Google Meet : " + meetErr);
+    }
+
+    // Si un lien Google Meet a été généré, l'ajouter à la description
+    if (generatedMeetUrl) {
+      try {
+        const updatedDesc = "<b>📹 Visioconférence Google Meet :</b> <a href='" + generatedMeetUrl + "'>" + generatedMeetUrl + "</a><p></p>" + description;
+        newEvent.setDescription(updatedDesc);
+      } catch (e) {}
     }
 
     const newEventId = newEvent.getId();
@@ -323,10 +351,20 @@ function updateEventAttendeeListAndDescription(sessionId: string): boolean {
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
 
-    // 3. Titre propre (sans [X participants]) et affichage du nombre + liste uniquement dans la description
-    const cleanTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    // 3. Titre propre sans répétition et affichage des inscrits + lien Google Meet dans la description
+    const cleanFormTitle = getCleanFormationTitle(formationTitle);
+    const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     
-    const newDescription = textAgenda
+    let meetHeader = "";
+    try {
+      const hangout = event.getHangoutLink();
+      if (hangout) {
+        meetHeader = "<b>📹 Visioconférence Google Meet :</b> <a href='" + hangout + "'>" + hangout + "</a><p></p>";
+      }
+    } catch (e) {}
+
+    const newDescription = meetHeader
+      + textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo
       + "<p>Programme de l'accompagnement :</p>" + formationCompetences
@@ -371,7 +409,8 @@ function resetEventToDefault(event: GoogleAppsScript.Calendar.CalendarEvent, ses
     const textAgenda = getParamValue("PARAMETRE_TEXTE_AGENDA") || "";
     const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "";
     
-    const cleanTitle = "Accompagnement Leroy Merlin - " + formationTitle + " [" + sessionId + "]";
+    const cleanFormTitle = getCleanFormationTitle(formationTitle);
+    const cleanTitle = "Accompagnement Leroy Merlin" + (cleanFormTitle ? " - " + cleanFormTitle : "") + " [" + sessionId + "]";
     const newDescription = textAgenda
       + "<p></p><b>" + formationDescription + "</b><p></p>"
       + connexionInfo;
