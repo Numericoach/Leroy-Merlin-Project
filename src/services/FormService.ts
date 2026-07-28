@@ -16,8 +16,18 @@ function updateFormChoices(): void {
     }
 
     const mainFormId = extractFormId(rawMainFormId);
-    const waitingFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE"));
-    const unsubFormId = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
+
+    let rawWaitingFormId = getParamValue("PARAMETRE_ID_FORMS_EDIT_WAITING");
+    if (!rawWaitingFormId || rawWaitingFormId.indexOf("1FAIpQL") > -1) {
+      rawWaitingFormId = getParamValue("PARAMETRE_ID_FORMS_LISTE_ATTENTE");
+    }
+    const waitingFormId = (rawWaitingFormId && rawWaitingFormId.indexOf("1FAIpQL") === -1) ? extractFormId(rawWaitingFormId) : "";
+
+    let rawUnsubFormId = getParamValue("PARAMETRE_ID_FORMS_EDIT_UNSUB");
+    if (!rawUnsubFormId || rawUnsubFormId.indexOf("1FAIpQL") > -1) {
+      rawUnsubFormId = getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION");
+    }
+    const unsubFormId = (rawUnsubFormId && rawUnsubFormId.indexOf("1FAIpQL") === -1) ? extractFormId(rawUnsubFormId) : "";
 
     if (!mainFormId) {
       Logger.log("ID Forms Inscription non trouvé dans les paramètres.");
@@ -25,11 +35,10 @@ function updateFormChoices(): void {
       return;
     }
 
-    const formsToUpdate = [
-      { id: mainFormId, type: "MAIN" },
-      { id: waitingFormId, type: "WAITING" },
-      { id: unsubFormId, type: "UNSUB" }
-    ];
+    const formsToUpdate: { id: string; type: string }[] = [];
+    if (mainFormId) formsToUpdate.push({ id: mainFormId, type: "MAIN" });
+    if (waitingFormId) formsToUpdate.push({ id: waitingFormId, type: "WAITING" });
+    if (unsubFormId) formsToUpdate.push({ id: unsubFormId, type: "UNSUB" });
 
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return;
