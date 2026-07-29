@@ -140,14 +140,28 @@ function updateFormChoices(): void {
         const targetItems: (GoogleAppsScript.Forms.ListItem | GoogleAppsScript.Forms.MultipleChoiceItem | GoogleAppsScript.Forms.CheckboxItem)[] = [];
 
         for (let i = 0; i < items.length; i++) {
-          const title = items[i].getTitle().toLowerCase();
+          const rawTitle = items[i].getTitle();
+          const title = (rawTitle || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
           const type = items[i].getType();
           if (
             type === FormApp.ItemType.LIST ||
             type === FormApp.ItemType.MULTIPLE_CHOICE ||
             type === FormApp.ItemType.CHECKBOX
           ) {
+            // EXCLURE FORMELLEMENT les questions de confirmation ("Confirmez votre désinscription") et de motif
             if (
+              title.indexOf("confirm") > -1 ||
+              title.indexOf("raison") > -1 ||
+              title.indexOf("pour quelle") > -1
+            ) {
+              continue;
+            }
+
+            if (
+              title.indexOf("voici les sessions") > -1 ||
+              title.indexOf("place") > -1 ||
+              title.indexOf("selection") > -1 ||
+              title.indexOf("sélection") > -1 ||
               title.indexOf("inscription") > -1 ||
               title.indexOf("session") > -1 ||
               title.indexOf("formation") > -1 ||
@@ -169,10 +183,21 @@ function updateFormChoices(): void {
           }
         }
 
-        // Fallback si aucun titre spécifique n'a été trouvé
+        // Fallback si aucun titre spécifique n'a été trouvé (en conservant les exclusions)
         if (targetItems.length === 0) {
           for (let i = 0; i < items.length; i++) {
+            const rawTitle = items[i].getTitle();
+            const title = (rawTitle || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
             const type = items[i].getType();
+
+            if (
+              title.indexOf("confirm") > -1 ||
+              title.indexOf("raison") > -1 ||
+              title.indexOf("pour quelle") > -1
+            ) {
+              continue;
+            }
+
             if (type === FormApp.ItemType.LIST) targetItems.push(items[i].asListItem());
             else if (type === FormApp.ItemType.MULTIPLE_CHOICE) targetItems.push(items[i].asMultipleChoiceItem());
             else if (type === FormApp.ItemType.CHECKBOX) targetItems.push(items[i].asCheckboxItem());

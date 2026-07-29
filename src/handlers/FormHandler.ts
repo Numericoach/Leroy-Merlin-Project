@@ -62,6 +62,12 @@ function onSubmit(e?: any): void {
         if (ss) ss.toast("✅ Participant " + data.thisEmail + " retiré de l'agenda pour la session " + data.thisSessionid, "SUCCÈS", 6);
         Logger.log("Désinscription traitée pour la session " + data.thisSessionid);
         processWaitingList(data.thisSessionid);
+
+        try {
+          updateFormChoices();
+        } catch (formErr) {
+          Logger.log("Avertissement mise à jour formulaires : " + formErr);
+        }
       } else {
         if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "AVERTISSEMENT", 8);
       }
@@ -256,6 +262,13 @@ function onSubmit(e?: any): void {
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
       if (ss) ss.toast("⚠️ Inscription enregistrée mais échec d'envoi du mail : " + mailErr, "AVERTISSEMENT", 7);
+    }
+
+    // 7. RAFRAÎCHIR AUTOMATIQUEMENT LES CHOIX DE SESSIONS DANS LES FORMULAIRES
+    try {
+      updateFormChoices();
+    } catch (syncErr) {
+      Logger.log("Avertissement rafraîchissement des formulaires : " + syncErr);
     }
     
   } catch (err) {

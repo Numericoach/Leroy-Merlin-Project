@@ -8,7 +8,12 @@ function setupTriggers(): void {
   // 1. Nettoyer les anciens déclencheurs existants pour éviter les doublons
   allTriggers.forEach(function (trigger) {
     const handler = trigger.getHandlerFunction();
-    if (handler === "onSubmit" || handler === "onEditTrigger" || handler === "onEdit") {
+    if (
+      handler === "onSubmit" || 
+      handler === "onEditTrigger" || 
+      handler === "onEdit" || 
+      handler === "autoUpdateFormChoicesTrigger"
+    ) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
@@ -25,20 +30,39 @@ function setupTriggers(): void {
     .onEdit()
     .create();
 
-  Logger.log("Déclencheurs 'onSubmit' et 'onEditTrigger' installés avec succès !");
+  // 4. Créer le déclencheur temporel récurrent (toutes les 15 minutes) pour mettre à jour les choix automatiquement
+  ScriptApp.newTrigger("autoUpdateFormChoicesTrigger")
+    .timeBased()
+    .everyMinutes(15)
+    .create();
+
+  Logger.log("Déclencheurs 'onSubmit', 'onEditTrigger' et 'autoUpdateFormChoicesTrigger' installés avec succès !");
+  if (ss) ss.toast("✅ Déclencheurs automatiques (Soumission, Modification & Temporel 15 min) installés !", "OUTILS", 7);
+}
+
+/**
+ * Déclencheur temporel récurrent (toutes les 15 minutes)
+ */
+function autoUpdateFormChoicesTrigger(): void {
+  try {
+    Logger.log("Synchronisation automatique récurrente des choix dans les Google Forms...");
+    updateFormChoices();
+  } catch (err) {
+    Logger.log("Erreur dans autoUpdateFormChoicesTrigger : " + err);
+  }
 }
 
 /**
  * Fonction déclenchée lors de TOUTE modification manuelle dans la feuille de calcul
- * (suppression de ligne dans INSCRIPTIONSS, modification de SESSIONS, PARAMETRES, FILLE ATTENTE, etc.)
+ * (suppression de ligne dans INSCRIPTIONSS, modification de SESSIONS, PARAMETRES, FILE ATTENTE, etc.)
  */
 function onEditTrigger(e?: any): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    if (sheetName === "SESSIONS") {
-      Logger.log("Modification dans l'onglet SESSIONS : synchronisation des événements d'agenda et du formulaire...");
-      createEventSession();
+    if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
+      Logger.log("Modification dans l'onglet " + sheetName + " : synchronisation des événements d'agenda et du formulaire...");
+      if (sheetName === "SESSIONS") createEventSession();
       try {
         updateFormChoices();
       } catch (formErr) {
