@@ -143,23 +143,70 @@ function getNbParticipantsForEmailAndSession(sessionId: string, email: string): 
 }
 
 /**
- * Extrait le lien Google Meet configuré pour une session (depuis PARAMETRES, LIEUX ou lien distanciel par défaut)
+ * Extrait le lien Google Meet configuré ou généré automatiquement pour une session (priorité à l'événement Agenda réel)
  */
 function getMeetUrlForSession(sessionId: string): string {
+  if (!sessionId) return "https://meet.google.com/apv-qoem-zpc";
+  
+  // 1. Chercher le lien Meet réel rattaché à l'événement Google Agenda de cette session
   try {
-    const connInfo = getParamValue("PARAMETRE_CONNEXION_1");
-    if (connInfo) {
-      const meetMatch = connInfo.match(/(https:\/\/meet\.google\.com\/[a-z0-9\-]+)/i);
-      if (meetMatch) return meetMatch[1];
-    }
+    const sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
+    if (sheetSessionEvenements) {
+      const lastRowEvt = sheetSessionEvenements.getLastRow();
+      if (lastRowEvt >= 2) {
+        const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
+        for (let i = sessionEvenementValues.length - 1; i >= 0; i--) {
+          if ((sessionEvenementValues[i][1] || "").toString().trim().toUpperCase() === sessionId.trim().toUpperCase()) {
+            const storedId = sessionEvenementValues[i][2] as string;
+            if (storedId) {
+              const event = getEventByIdRobust(storedId);
+              if (event) {
+                // a) Via l'API Google Apps Script native
+                try {
+                  const hangout = (event as any).getHangoutLink ? (event as any).getHangoutLink() : null;
+                  if (hangout && hangout.indexOf("meet.google.com") > -1) {
+                    return hangout;
+                  }
+                } catch (e) {}
 
+                // b) Via la description de l'événement Agenda
+                const desc = event.getDescription() || "";
+                const matchDesc = desc.match(/(https:\/\/meet\.google\.com\/[a-z0-9\-]+)/i);
+                if (matchDesc && matchDesc[1]) {
+                  return matchDesc[1];
+                }
+
+                // c) Via Calendar v3 Advanced Service
+                try {
+                  const agenda = getTargetCalendar();
+                  const calendarId = agenda ? agenda.getId() : "primary";
+                  const cleanEvtId = storedId.replace("@google.com", "");
+                  if (typeof (globalThis as any).Calendar !== "undefined" && (globalThis as any).Calendar.Events) {
+                    const fetchedEvt = (globalThis as any).Calendar.Events.get(calendarId, cleanEvtId);
+                    if (fetchedEvt && fetchedEvt.hangoutLink) {
+                      return fetchedEvt.hangoutLink;
+                    }
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Erreur lors de la récupération du lien Meet de l'événement : " + e);
+  }
+
+  // 2. Chercher dans l'onglet SESSIONS / LIEUX
+  try {
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (sheetSessions) {
       const lastRow = sheetSessions.getLastRow();
       if (lastRow >= 2) {
         const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
         for (let i = 0; i < sessionsValues.length; i++) {
-          if (sessionsValues[i][0] === sessionId) {
+          if ((sessionsValues[i][0] || "").toString().trim().toUpperCase() === sessionId.trim().toUpperCase()) {
             const lieuStr = (sessionsValues[i][6] || sessionsValues[i][7] || "").toString();
             const match = lieuStr.match(/\[(.*?)\]/);
             if (match && match[1]) {
@@ -187,6 +234,14 @@ function getMeetUrlForSession(sessionId: string): string {
       }
     }
   } catch (e) {}
+
+  // 3. Fallback sur PARAMETRES / Défaut
+  const connInfo = getParamValue("PARAMETRE_CONNEXION_1");
+  if (connInfo) {
+    const meetMatch = connInfo.match(/(https:\/\/meet\.google\.com\/[a-z0-9\-]+)/i);
+    if (meetMatch) return meetMatch[1];
+  }
+
   return "https://meet.google.com/apv-qoem-zpc";
 }
 

@@ -38,63 +38,48 @@ function generateConvocationPdf(
       const convocationDoc = modeleConvocation.makeCopy(convocationName, folderConvocation);
       const doc = DocumentApp.openById(convocationDoc.getId());
       
+      const todayStr = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy');
+      const targets: Record<string, string> = {
+        "DATE AUJOURDHUI": todayStr,
+        "DATE_AUJOURDHUI": todayStr,
+        "SESSION ID": sessionId,
+        "EMAIL": email,
+        "CIVILITE": civilite || "",
+        "PRENOM": prenom || "",
+        "NOM": nom || "",
+        "TITRE FORMATION": formationTitle,
+        "DATE": dateStr,
+        "HEURE DEBUT": heureDebutStr,
+        "HEURE FIN": heureFinStr,
+        "LIEU": lieuStr,
+        "CONNEXION": connexionInfo,
+        "DESCRIPTION": descriptionStr,
+        "APPLI": formationTitle,
+        "NB PARTICIPANTS": nbParticipants.toString(),
+        "PARTICIPANTS": nbParticipants.toString(),
+        "ADRESSE LIEU": adresseLieu || "",
+        "CP": cpLieu || "",
+        "VILLE": villeLieu || "",
+        "INFOS COMPLEMENTAIRES": infoCompStr || ""
+      };
+
       const replaceVariables = (element: any) => {
         if (!element) return;
         try {
-          const todayStr = Utilities.formatDate(new Date(), 'Europe/Paris', 'dd/MM/yyyy');
-          try { element.replaceText("{{DATE AUJOURDHUI}}", todayStr); } catch (e) {}
-          try { element.replaceText("\\{\\{DATE AUJOURDHUI\\}\\}", todayStr); } catch (e) {}
-          try { element.replaceText("{{DATE_AUJOURDHUI}}", todayStr); } catch (e) {}
-          try { element.replaceText("\\{\\{DATE_AUJOURDHUI\\}\\}", todayStr); } catch (e) {}
-
-          const targets: Record<string, string> = {
-            "SESSION ID": sessionId,
-            "EMAIL": email,
-            "CIVILITE": civilite || "",
-            "PRENOM": prenom || "",
-            "NOM": nom || "",
-            "TITRE FORMATION": formationTitle,
-            "DATE": dateStr,
-            "HEURE DEBUT": heureDebutStr,
-            "HEURE FIN": heureFinStr,
-            "LIEU": lieuStr,
-            "CONNEXION": connexionInfo,
-            "DESCRIPTION": descriptionStr,
-            "APPLI": formationTitle,
-            "NB PARTICIPANTS": nbParticipants.toString(),
-            "PARTICIPANTS": nbParticipants.toString(),
-            "ADRESSE LIEU": adresseLieu || "",
-            "CP": cpLieu || "",
-            "VILLE": villeLieu || "",
-            "INFOS COMPLEMENTAIRES": infoCompStr || ""
-          };
-
           for (const key in targets) {
             const val = targets[key];
-            try { element.replaceText("{{" + key + "}}", val); } catch (e) {}
-            try { element.replaceText("\\{\\{" + key + "\\}\\}", val); } catch (e) {}
+            const escapedKey = key.replace(/([.*+?^${}()|[\]\/\\])/g, '\\$1');
+            try { element.replaceText("\\{\\{" + escapedKey + "\\}\\}", val); } catch (e) {}
+            try { element.replaceText("\\{\\{ " + escapedKey + " \\}\\}", val); } catch (e) {}
           }
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       };
 
-      const body = doc.getBody();
-
-      replaceVariables(body);
-      replaceVariables(doc.getHeader());
-      replaceVariables(doc.getFooter());
-
-      try {
-        const parent = body.getParent();
-        for (let i = 0; i < parent.getNumChildren(); i++) {
-          const child = parent.getChild(i);
-          const childType = child.getType();
-          if (childType === DocumentApp.ElementType.HEADER_SECTION || childType === DocumentApp.ElementType.FOOTER_SECTION) {
-            replaceVariables(child);
-          }
-        }
-      } catch (e) {}
+      replaceVariables(doc.getBody());
+      const header = doc.getHeader();
+      if (header) replaceVariables(header);
+      const footer = doc.getFooter();
+      if (footer) replaceVariables(footer);
 
       doc.saveAndClose();
 

@@ -75,20 +75,55 @@ function onSubmit(e?: any): void {
       return;
     }
 
-    // 2. VÉRIFIER LES PLACES RESTANTES DANS L'ONGLET SESSIONS
+    // 2. VÉRIFIER LES PLACES RESTANTES ET CHARGER LES DÉTAILS DE LA SESSION
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     let remainingSeatsAfterForm = 0;
     let sessionFound = false;
+    let sessionDetails: any = null;
 
     if (sheetSessions) {
       const lastRowSessions = sheetSessions.getLastRow();
       if (lastRowSessions >= 2) {
-        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 13).getValues();
+        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 14).getValues();
         for (let i = 0; i < sessionsData.length; i++) {
           const idInSheet = (sessionsData[i][0] || "").toString().trim();
           if (idInSheet === data.thisSessionid) {
             remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
             sessionFound = true;
+            
+            const dateVal = sessionsData[i][2];
+            const hdVal = sessionsData[i][3];
+            const hfVal = sessionsData[i][4];
+            let dateStr = "";
+            let heureDebutStr = "";
+            let heureFinStr = "";
+            if (dateVal) {
+              const d = new Date(dateVal);
+              if (!isNaN(d.getTime())) {
+                dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+              }
+            }
+            if (hdVal) {
+              const hd = new Date(hdVal);
+              if (!isNaN(hd.getTime())) {
+                heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
+              }
+            }
+            if (hfVal) {
+              const hf = new Date(hfVal);
+              if (!isNaN(hf.getTime())) {
+                heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
+              }
+            }
+
+            sessionDetails = {
+              formationTitle: sessionsData[i][13] || "Formation Leroy Merlin",
+              dateStr: dateStr,
+              heureDebutStr: heureDebutStr,
+              heureFinStr: heureFinStr,
+              lieuStr: sessionsData[i][7] || "",
+              infoCompStr: sessionsData[i][8] || ""
+            };
             break;
           }
         }
@@ -110,6 +145,34 @@ function onSubmit(e?: any): void {
               data.thisSessionid = idInSheet;
               remainingSeatsAfterForm = Number(sessionsData[i][11]);
               sessionFound = true;
+
+              const dateVal = sessionsData[i][2];
+              const hdVal = sessionsData[i][3];
+              const hfVal = sessionsData[i][4];
+              let dateStr = "";
+              let heureDebutStr = "";
+              let heureFinStr = "";
+              if (dateVal) {
+                const d = new Date(dateVal);
+                if (!isNaN(d.getTime())) dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+              }
+              if (hdVal) {
+                const hd = new Date(hdVal);
+                if (!isNaN(hd.getTime())) heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
+              }
+              if (hfVal) {
+                const hf = new Date(hfVal);
+                if (!isNaN(hf.getTime())) heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
+              }
+
+              sessionDetails = {
+                formationTitle: sessionsData[i][13] || "Formation Leroy Merlin",
+                dateStr: dateStr,
+                heureDebutStr: heureDebutStr,
+                heureFinStr: heureFinStr,
+                lieuStr: sessionsData[i][7] || "",
+                infoCompStr: sessionsData[i][8] || ""
+              };
               break;
             }
           }
@@ -188,7 +251,7 @@ function onSubmit(e?: any): void {
 
     // 6. ENVOI DE LA CONVOCATION / CONFIRMATION
     try {
-      sendConfirmationMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom, data.thisCivilite, data.thisNbParticipants);
+      sendConfirmationMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom, data.thisCivilite, data.thisNbParticipants, sessionDetails);
       if (ss) ss.toast("✅ Inscription validée ! Convocation envoyée à " + data.thisEmail, "SUCCÈS", 7);
     } catch (mailErr) {
       Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
@@ -213,6 +276,18 @@ function inscription(time: any, sessionId: string, email: string, nbParticipants
     // N'ajouter que 3 colonnes propres pour ne pas écraser les formules de la colonne D
     sheetInscriptions.appendRow([time, cleanSessionId, cleanEmail]);
   }
+}
+
+/**
+ * Helper pour normaliser les en-têtes (minuscules, sans accents, sans espaces superflus)
+ */
+function normalizeHeaderString(str: string): string {
+  return (str || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
 /**
@@ -243,29 +318,31 @@ function extractSubmissionData(e: any): any {
     thisTime = new Date();
   }
 
+  // 1. Extraction basée sur namedValues (Google Forms)
   if (e && e.namedValues) {
     for (const key in e.namedValues) {
-      const keyLower = key.toLowerCase();
+      const keyNorm = normalizeHeaderString(key);
       const val = (e.namedValues[key][0] || "").toString().trim();
-      
-      if (!thisEmail && (keyLower.indexOf("mail") > -1 || keyLower.indexOf("courriel") > -1 || keyLower.indexOf("email") > -1)) {
+      if (!val) continue;
+
+      if (!thisEmail && (keyNorm.indexOf("mail") > -1 || keyNorm.indexOf("courriel") > -1)) {
         thisEmail = val;
       }
-      if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || keyLower.indexOf("inscription à la formation") > -1 || keyLower.indexOf("session") > -1) {
+      if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || keyNorm.indexOf("inscription") > -1 || keyNorm.indexOf("session") > -1) {
         if (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || !thisSession) {
           thisSession = val;
         }
       }
-      if (!thisCivilite && keyLower.indexOf("civilite") > -1) {
+      if (!thisCivilite && (keyNorm.indexOf("civilite") > -1 || keyNorm.indexOf("titre") > -1)) {
         thisCivilite = val;
       }
-      if (!thisPrenom && keyLower.indexOf("prenom") > -1) {
+      if (!thisPrenom && (keyNorm.indexOf("prenom") > -1 || keyNorm.indexOf("first") > -1)) {
         thisPrenom = val;
       }
-      if (!thisNom && keyLower.indexOf("nom") > -1 && keyLower.indexOf("prenom") === -1) {
+      if (!thisNom && keyNorm.indexOf("prenom") === -1 && keyNorm.indexOf("nombre") === -1 && (keyNorm.indexOf("nom") > -1 || keyNorm.indexOf("last") > -1)) {
         thisNom = val;
       }
-      if ((keyLower.indexOf("nombre") > -1 && keyLower.indexOf("participant") > -1) || keyLower.indexOf("combien") > -1) {
+      if ((keyNorm.indexOf("nombre") > -1 && keyNorm.indexOf("participant") > -1) || keyNorm.indexOf("combien") > -1) {
         const parsedNb = parseInt(val, 10);
         if (!isNaN(parsedNb) && parsedNb > 0) {
           thisNbParticipants = parsedNb;
@@ -274,41 +351,53 @@ function extractSubmissionData(e: any): any {
     }
   }
 
-  if (e && e.values && Array.isArray(e.values)) {
-    if (!thisEmail && e.values[1] && e.values[1].indexOf("@") > -1) thisEmail = e.values[1];
-    if (!thisCivilite && e.values[2]) thisCivilite = e.values[2];
-    if (!thisPrenom && e.values[3]) thisPrenom = e.values[3];
-    if (!thisNom && e.values[4]) thisNom = e.values[4];
+  // 2. Extraction basée sur les en-têtes réels de la feuille de réponse (e.range.getSheet())
+  if (e && e.range) {
+    try {
+      const sheet = e.range.getSheet();
+      const lastCol = sheet.getLastColumn();
+      if (lastCol > 0) {
+        const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => normalizeHeaderString(h ? h.toString() : ""));
+        const rowVals = e.range.getValues()[0];
 
+        for (let col = 0; col < headers.length; col++) {
+          const h = headers[col];
+          const val = (rowVals[col] || "").toString().trim();
+          if (!val) continue;
+
+          if (!thisEmail && (h.indexOf("mail") > -1 || h.indexOf("courriel") > -1)) {
+            thisEmail = val;
+          }
+          if (!thisPrenom && (h.indexOf("prenom") > -1 || h.indexOf("first") > -1)) {
+            thisPrenom = val;
+          }
+          if (!thisNom && h.indexOf("prenom") === -1 && h.indexOf("nombre") === -1 && (h.indexOf("nom") > -1 || h.indexOf("last") > -1)) {
+            thisNom = val;
+          }
+          if (!thisCivilite && (h.indexOf("civilite") > -1 || h.indexOf("titre") > -1)) {
+            thisCivilite = val;
+          }
+          if (!thisSession && (val.indexOf("[") > -1 || val.indexOf("SES-") > -1 || h.indexOf("session") > -1 || h.indexOf("inscription") > -1)) {
+            thisSession = val;
+          }
+        }
+      }
+    } catch (err) {
+      Logger.log("Erreur lors de l'extraction par la feuille de réponse : " + err);
+    }
+  }
+
+  // 3. Extraction de secours sur e.values pour e-mail et session uniquement
+  if (e && e.values && Array.isArray(e.values)) {
     e.values.forEach((val: any) => {
       const valStr = (val || "").toString().trim();
       if (!thisEmail && valStr.indexOf("@") > -1) {
         thisEmail = valStr;
       }
-      if (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1) {
+      if (!thisSession && (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1)) {
         thisSession = valStr;
       }
     });
-  }
-
-  if ((!thisEmail || !thisSession) && e && e.range) {
-    const rowValues = e.range.getValues()[0];
-    if (rowValues && rowValues.length > 0) {
-      if (!thisEmail && rowValues[1] && rowValues[1].toString().indexOf("@") > -1) thisEmail = rowValues[1].toString().trim();
-      if (!thisCivilite && rowValues[2]) thisCivilite = rowValues[2].toString().trim();
-      if (!thisPrenom && rowValues[3]) thisPrenom = rowValues[3].toString().trim();
-      if (!thisNom && rowValues[4]) thisNom = rowValues[4].toString().trim();
-
-      rowValues.forEach((val: any) => {
-        const valStr = (val || "").toString().trim();
-        if (!thisEmail && valStr.indexOf("@") > -1) {
-          thisEmail = valStr;
-        }
-        if (valStr.indexOf("[") > -1 || valStr.indexOf("SES-") > -1) {
-          thisSession = valStr;
-        }
-      });
-    }
   }
 
   let thisSessionid = "";
@@ -364,7 +453,12 @@ function processWaitingList(sessionId: string): void {
     return;
   }
 
-  const data = sheetAttente.getRange(2, 1, lastRow - 1, 15).getValues(); // Lire 15 colonnes max
+  const lastColAttente = sheetAttente.getLastColumn();
+  const headersAttente = sheetAttente.getRange(1, 1, 1, lastColAttente).getValues()[0].map(h => normalizeHeaderString(h ? h.toString() : ""));
+  const prenomColIdxAtt = headersAttente.findIndex(h => h.indexOf("prenom") > -1 || h.indexOf("first") > -1);
+  const nomColIdxAtt = headersAttente.findIndex(h => h.indexOf("prenom") === -1 && h.indexOf("nombre") === -1 && (h.indexOf("nom") > -1 || h.indexOf("last") > -1));
+
+  const data = sheetAttente.getRange(2, 1, lastRow - 1, lastColAttente).getValues();
   let personNotified = false;
 
   for (let i = 0; i < data.length; i++) {
@@ -382,8 +476,8 @@ function processWaitingList(sessionId: string): void {
     }
 
     if (isSessionMatch && !isNotified && email) {
-      const prenom = (row[2] || "").toString();
-      const nom = (row[3] || "").toString();
+      const prenom = prenomColIdxAtt > -1 ? (row[prenomColIdxAtt] || "").toString().trim() : "";
+      const nom = nomColIdxAtt > -1 ? (row[nomColIdxAtt] || "").toString().trim() : "";
 
       Logger.log("Place libérée ! Inscription automatique de " + email + " pour la session " + sessionId);
       if (ss) ss.toast("🚀 Promotion automatique de " + email + " pour la session " + sessionId + "...", "TRAITEMENT", 5);
@@ -454,7 +548,16 @@ function processUnprocessedInscriptions(): void {
     return;
   }
 
-  const data = sheetFormResps.getRange(2, 1, lastRow - 1, 10).getValues();
+  const lastCol = sheetFormResps.getLastColumn();
+  const rawHeaders = sheetFormResps.getRange(1, 1, 1, lastCol).getValues()[0].map(h => normalizeHeaderString(h ? h.toString() : ""));
+  
+  const emailColIdx = rawHeaders.findIndex(h => h.indexOf("mail") > -1 || h.indexOf("courriel") > -1);
+  const prenomColIdx = rawHeaders.findIndex(h => h.indexOf("prenom") > -1 || h.indexOf("first") > -1);
+  const nomColIdx = rawHeaders.findIndex(h => h.indexOf("prenom") === -1 && h.indexOf("nombre") === -1 && (h.indexOf("nom") > -1 || h.indexOf("last") > -1));
+  const civiliteColIdx = rawHeaders.findIndex(h => h.indexOf("civilite") > -1 || h.indexOf("titre") > -1);
+  const sessionColIdx = rawHeaders.findIndex(h => h.indexOf("session") > -1 || h.indexOf("inscription") > -1 || h.indexOf("formation") > -1);
+
+  const data = sheetFormResps.getRange(2, 1, lastRow - 1, lastCol).getValues();
   let countProcessed = 0;
 
   // Charger toutes les inscriptions existantes une seule fois avant la boucle pour un contrôle en O(1)
@@ -473,10 +576,22 @@ function processUnprocessedInscriptions(): void {
 
   data.forEach(row => {
     const time = row[0] || new Date();
-    const email = (row[1] || "").toString().trim();
-    const prenom = (row[2] || "").toString().trim();
-    const nom = (row[3] || "").toString().trim();
-    const rawSession = (row[5] || "").toString().trim();
+    const email = emailColIdx > -1 ? (row[emailColIdx] || "").toString().trim() : "";
+    const prenom = prenomColIdx > -1 ? (row[prenomColIdx] || "").toString().trim() : "";
+    const nom = nomColIdx > -1 ? (row[nomColIdx] || "").toString().trim() : "";
+    const civilite = civiliteColIdx > -1 ? (row[civiliteColIdx] || "").toString().trim() : "";
+    
+    let rawSession = "";
+    if (sessionColIdx > -1) {
+      rawSession = (row[sessionColIdx] || "").toString().trim();
+    } else {
+      row.forEach((cell: any) => {
+        const str = (cell || "").toString().trim();
+        if (!rawSession && (str.indexOf("SES-") > -1 || str.indexOf("[") > -1)) {
+          rawSession = str;
+        }
+      });
+    }
 
     if (!email || !rawSession) return;
 
@@ -496,7 +611,7 @@ function processUnprocessedInscriptions(): void {
         addParticipantToCalendar(sessionId, email);
       } catch (e) {}
       try {
-        sendConfirmationMail(sessionId, email, prenom, nom);
+        sendConfirmationMail(sessionId, email, prenom, nom, civilite);
       } catch (e) {}
       countProcessed++;
     }

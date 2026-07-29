@@ -102,7 +102,25 @@ function sendSpotAvailableMail(sessionId: string, email: string, prenom?: string
 /**
  * Envoi de l'e-mail de convocation / confirmation personnalisé avec le PDF complet
  */
-function sendConfirmationMail(sessionId: string, email: string, prenom?: string, nom?: string, civilite?: string, nbParticipants: number = 1): void {
+function sendConfirmationMail(
+  sessionId: string, 
+  email: string, 
+  prenom?: string, 
+  nom?: string, 
+  civilite?: string, 
+  nbParticipants: number = 1,
+  sessionDetails?: {
+    formationTitle?: string,
+    dateStr?: string,
+    heureDebutStr?: string,
+    heureFinStr?: string,
+    lieuStr?: string,
+    infoCompStr?: string,
+    adresseLieu?: string,
+    cpLieu?: string,
+    villeLieu?: string
+  }
+): void {
   const urlDesinscription = extractFormId(getParamValue("PARAMETRE_ID_FORMS_DESINSCRIPTION"));
   const senderEmail = getParamValue("PARAMETRE_EXPEDITEUR_EMAIL");
   const senderName = getParamValue("PARAMETRE_NOM_EXPEDITEUR") || "Formations Leroy Merlin";
@@ -119,63 +137,69 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     "/viewform?usp=pp_url&" + entryEmailId + "=" + encodeURIComponent(email) + 
     "&" + entrySessionId + "=[" + encodeURIComponent(sessionId) + "]";
 
-  const connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "Lien Meet inclus dans votre invitation Agenda";
+  const actualMeetUrl = getMeetUrlForSession(sessionId);
+  let connexionInfo = "";
+  if (actualMeetUrl) {
+    connexionInfo = "Connectez-vous le jour J, 5 minutes avant le début du webinaire sur ce lien Meet :\n" + actualMeetUrl;
+  } else {
+    connexionInfo = getParamValue("PARAMETRE_CONNEXION_1") || "Lien Meet inclus dans votre invitation Agenda";
+  }
 
-  // Récupérer les détails de la session depuis SESSIONS
-  let formationTitle = "Formation Leroy Merlin";
-  let dateStr = "";
-  let heureDebutStr = "";
-  let heureFinStr = "";
-  let lieuStr = "";
-  let descriptionStr = "";
+  // Récupérer les détails de la session (depuis sessionDetails pré-chargé ou SESSIONS)
+  let formationTitle = sessionDetails?.formationTitle || "Formation Leroy Merlin";
+  let dateStr = sessionDetails?.dateStr || "";
+  let heureDebutStr = sessionDetails?.heureDebutStr || "";
+  let heureFinStr = sessionDetails?.heureFinStr || "";
+  let lieuStr = sessionDetails?.lieuStr || "";
+  let infoCompStr = sessionDetails?.infoCompStr || "";
+  let adresseLieu = sessionDetails?.adresseLieu || "";
+  let cpLieu = sessionDetails?.cpLieu || "";
+  let villeLieu = sessionDetails?.villeLieu || "";
 
-  let infoCompStr = "";
-  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
-  if (sheetSessions) {
-    const lastRow = sheetSessions.getLastRow();
-    if (lastRow >= 2) {
-      const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
-      for (let i = 0; i < sessionsValues.length; i++) {
-        if (sessionsValues[i][0] === sessionId) {
-          formationTitle = sessionsValues[i][13] || formationTitle;
-          if (sessionsValues[i][2]) {
-            const d = new Date(sessionsValues[i][2]);
-            dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+  if (!sessionDetails) {
+    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+    if (sheetSessions) {
+      const lastRow = sheetSessions.getLastRow();
+      if (lastRow >= 2) {
+        const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+        for (let i = 0; i < sessionsValues.length; i++) {
+          if (sessionsValues[i][0] === sessionId) {
+            formationTitle = sessionsValues[i][13] || formationTitle;
+            if (sessionsValues[i][2]) {
+              const d = new Date(sessionsValues[i][2]);
+              dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+            }
+            if (sessionsValues[i][3]) {
+              const hd = new Date(sessionsValues[i][3]);
+              heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
+            }
+            if (sessionsValues[i][4]) {
+              const hf = new Date(sessionsValues[i][4]);
+              heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
+            }
+            lieuStr = sessionsValues[i][7] || "";
+            infoCompStr = sessionsValues[i][8] || "";
+            break;
           }
-          if (sessionsValues[i][3]) {
-            const hd = new Date(sessionsValues[i][3]);
-            heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
-          }
-          if (sessionsValues[i][4]) {
-            const hf = new Date(sessionsValues[i][4]);
-            heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
-          }
-          lieuStr = sessionsValues[i][7] || "";
-          infoCompStr = sessionsValues[i][8] || "";
-          break;
         }
       }
     }
-  }
 
-  let adresseLieu = "";
-  let cpLieu = "";
-  let villeLieu = "";
-
-  const lieuMatch = lieuStr.match(/\[(.*?)\]/);
-  if (lieuMatch && lieuMatch[1]) {
-    const lieuId = lieuMatch[1];
-    const sheetLieux = ss ? ss.getSheetByName("LIEUX") : null;
-    if (sheetLieux) {
-      const lieuxLastRow = sheetLieux.getLastRow();
-      if (lieuxLastRow >= 2) {
-        const lieuxValues = sheetLieux.getRange(2, 2, lieuxLastRow - 1, 6).getValues();
-        for (let j = 0; j < lieuxValues.length; j++) {
-          if (lieuxValues[j][0] === lieuId) {
-            adresseLieu = lieuxValues[j][2] || "";
-            cpLieu = lieuxValues[j][3] || "";
-            villeLieu = lieuxValues[j][4] || "";
-            break;
+    const lieuMatch = lieuStr.match(/\[(.*?)\]/);
+    if (lieuMatch && lieuMatch[1]) {
+      const lieuId = lieuMatch[1];
+      const sheetLieux = ss ? ss.getSheetByName("LIEUX") : null;
+      if (sheetLieux) {
+        const lieuxLastRow = sheetLieux.getLastRow();
+        if (lieuxLastRow >= 2) {
+          const lieuxValues = sheetLieux.getRange(2, 2, lieuxLastRow - 1, 6).getValues();
+          for (let j = 0; j < lieuxValues.length; j++) {
+            if (lieuxValues[j][0] === lieuId) {
+              adresseLieu = lieuxValues[j][2] || "";
+              cpLieu = lieuxValues[j][3] || "";
+              villeLieu = lieuxValues[j][4] || "";
+              break;
+            }
           }
         }
       }
@@ -186,7 +210,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   const pdfResult = generateConvocationPdf(
     sessionId, email, prenom || "", nom || "", civilite || "", 
     formationTitle, dateStr, heureDebutStr, heureFinStr, lieuStr, 
-    connexionInfo, descriptionStr, nbParticipants,
+    connexionInfo, "", nbParticipants,
     adresseLieu, cpLieu, villeLieu, infoCompStr
   );
 
@@ -203,8 +227,6 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
     + "<div style='background-color: #f4f7f6; padding: 15px; border-radius: 6px; margin: 15px 0;'>"
     + "<b>Informations de connexion :</b><br>" + connexionInfo
     + "</div>";
-
-
 
   if (pdfResult.pdfUrl && pdfResult.pdfUrl !== "") {
     htmlBody += "<p><a href='" + pdfResult.pdfUrl + "' style='display:inline-block; background-color:#78BE20; color:white; padding:10px 18px; text-decoration:none; border-radius:5px; font-weight:bold;'>📄 Télécharger votre Convocation PDF</a></p>";
@@ -223,21 +245,7 @@ function sendConfirmationMail(sessionId: string, email: string, prenom?: string,
   if (senderEmail && senderEmail.length > 3) {
     const trimmedSender = senderEmail.trim();
     mailOptions.replyTo = trimmedSender;
-
-    try {
-      const aliases = GmailApp.getAliases();
-      const currentUserEmail = Session.getActiveUser().getEmail();
-      
-      // Si l'adresse est l'utilisateur principal ou un alias validé dans Gmail
-      if (trimmedSender === currentUserEmail || aliases.indexOf(trimmedSender) > -1) {
-        mailOptions.from = trimmedSender;
-      } else {
-        Logger.log("ℹ️ L'adresse expéditeur '" + trimmedSender + "' n'est pas encore enregistrée comme Alias dans votre Gmail. Allez dans Gmail > Paramètres > Comptes et importation > Envoyer des e-mails en tant que pour l'ajouter.");
-        mailOptions.from = trimmedSender; // On essaie quand même
-      }
-    } catch (aliasErr) {
-      mailOptions.from = trimmedSender;
-    }
+    mailOptions.from = trimmedSender;
   }
 
   if (pdfResult.pdfAttachment) {
