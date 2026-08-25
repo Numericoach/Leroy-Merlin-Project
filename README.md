@@ -59,14 +59,10 @@ Le projet est écrit en **TypeScript** et structuré comme suit sous le dossier 
   - `MESSAGE.html` : Contenu HTML pour les e-mails de notification.
 - `src/utils.ts` : Fonctions utilitaires globales.
 
----
-
 ## Déploiement des modifications
 
-Les fichiers TypeScript du dossier `src/` sont compilés en JavaScript dans le dossier `dist/` avant d'être poussés vers Google Apps Script.
-
-Pour compiler et pousser les modifications :
+Pour pousser les mises à jour des fichiers du dossier `src/` vers l'instance Google Apps Script :
 
 ```bash
-npm run push
+npx clasp push
 ```
