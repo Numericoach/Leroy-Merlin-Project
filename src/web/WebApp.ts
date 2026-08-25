@@ -53,7 +53,30 @@ function getAvailableSessionsForWeb(): any[] {
                       String(publish) !== "0" && 
                       String(publish).trim() !== "";
 
-    if (isPublished && !isNaN(placesRestantes) && placesRestantes > 0) {
+    // Filtrer les dates passées pour ne pas afficher de sessions expirées
+    let isPastDate = false;
+    if (dateVal) {
+      let d: Date | null = null;
+      if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+        d = dateVal;
+      } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
+        const parts = dateVal.split('/');
+        if (parts.length === 3) {
+          d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        } else {
+          d = new Date(dateVal);
+        }
+      }
+      if (d && !isNaN(d.getTime())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d.getTime() < today.getTime()) {
+          isPastDate = true;
+        }
+      }
+    }
+
+    if (isPublished && !isPastDate && !isNaN(placesRestantes) && placesRestantes > 0) {
       // Formatage de la date (ex: Le mardi 28 juillet 2026)
       let dateText = "";
       if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {

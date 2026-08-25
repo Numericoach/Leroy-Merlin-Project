@@ -125,16 +125,22 @@ function getParamValue(paramKey: string): string {
  * Menu personnalisé dans Google Sheets
  */
 function onOpen(): void {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu('OUTILS')
-    .addItem('Synchroniser les événements Agenda (Pré-réservation)', 'createEventSession')
-    .addItem('Tester la génération de PDF', 'testPDFGeneration')
-    .addItem('Tester l\'intégration Google Agenda', 'testAgendaIntegration')
-    .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
-    .addItem('Générer les Documentations (Google Docs)', 'createGoogleDocsDocumentation')
-    .addItem('Installer / Réinitialiser les déclencheurs (Triggers)', 'setupTriggers')
-    .addItem('Retraiter les inscriptions non traitées', 'processUnprocessedInscriptions')
-    .addToUi();
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('OUTILS')
+      .addItem('Synchroniser les événements Agenda (Pré-réservation)', 'createEventSession')
+      .addItem('Traiter la liste d\'attente (Promouvoir les candidats)', 'processAllWaitingLists')
+      .addItem('Restaurer la formule des IDs de Session (ArrayFormula)', 'ensureSessionIds')
+      .addItem('Tester la génération de PDF', 'testPDFGeneration')
+      .addItem('Tester l\'intégration Google Agenda', 'testAgendaIntegration')
+      .addItem('Mettre à jour les sessions dans le Formulaire', 'updateFormChoices')
+      .addItem('Générer les Documentations (Google Docs)', 'createGoogleDocsDocumentation')
+      .addItem('Installer / Réinitialiser les déclencheurs (Triggers)', 'setupTriggers')
+      .addItem('Retraiter les inscriptions non traitées', 'processUnprocessedInscriptions')
+      .addToUi();
+  } catch (err) {
+    Logger.log("Erreur dans onOpen : " + err);
+  }
 }
 
 /**
@@ -142,28 +148,72 @@ function onOpen(): void {
  */
 function parseDateTime(dateVal: Date | string | number | null | undefined, timeVal: Date | string | number | null | undefined): Date {
   let d = new Date();
-  if (dateVal instanceof Date) {
+  if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
     d = new Date(dateVal.getTime());
   } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
-    const parts = dateVal.split('/');
-    if (parts.length === 3) {
-      d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-    } else {
-      d = new Date(dateVal);
+    const str = dateVal.trim();
+    // Support des dates au format ISO (ex: 2026-08-27)
+    if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const parts = str.split('T')[0].split('-');
+      d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    // Support des dates avec séparateur / (ex: 27/08/2026 ou 27/08/26)
+    else if (str.indexOf('/') > -1) {
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        let year = parseInt(parts[2], 10);
+        if (year < 100) year += 2000;
+        d = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    }
+    // Support des dates textuelles en français ex: "jeudi 27 août 2026"
+    else {
+      const frenchMonths: Record<string, number> = {
+        "janvier": 0, "janv": 0,
+        "février": 1, "fevrier": 1, "févr": 1, "fevr": 1,
+        "mars": 2,
+        "avril": 3, "avr": 3,
+        "mai": 4,
+        "juin": 5,
+        "juillet": 6, "juil": 6,
+        "août": 7, "aout": 7,
+        "septembre": 8, "sept": 8,
+        "octobre": 9, "oct": 9,
+        "novembre": 10, "nov": 10,
+        "décembre": 11, "decembre": 11, "déc": 11, "dec": 11
+      };
+      const matchText = str.toLowerCase().match(/(\d{1,2})\s+([a-zàâäéèêëîïôöùûüç]+)\s+(\d{4})/);
+      if (matchText) {
+        const day = parseInt(matchText[1], 10);
+        const monthName = matchText[2];
+        const year = parseInt(matchText[3], 10);
+        if (frenchMonths[monthName] !== undefined) {
+          d = new Date(year, frenchMonths[monthName], day);
+        }
+      } else {
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) {
+          d = parsed;
+        }
+      }
     }
   }
 
   let hours = 9;
   let minutes = 0;
 
-  if (timeVal instanceof Date) {
+  if (timeVal instanceof Date && !isNaN(timeVal.getTime())) {
     hours = timeVal.getHours();
     minutes = timeVal.getMinutes();
   } else if (typeof timeVal === 'string' && timeVal.trim() !== '') {
-    const timeParts = timeVal.split(':');
+    const cleanTime = timeVal.trim().replace("h", ":").replace("H", ":").replace(".", ":");
+    const timeParts = cleanTime.split(':');
     if (timeParts.length >= 2) {
       hours = parseInt(timeParts[0], 10);
       minutes = parseInt(timeParts[1], 10);
+    } else {
+      const parsedNum = parseInt(cleanTime, 10);
+      if (!isNaN(parsedNum)) hours = parsedNum;
     }
   } else if (typeof timeVal === 'number') {
     const totalMinutes = Math.round(timeVal * 24 * 60);
@@ -171,6 +221,12 @@ function parseDateTime(dateVal: Date | string | number | null | undefined, timeV
     minutes = totalMinutes % 60;
   }
   
+  if (isNaN(d.getTime())) {
+    d = new Date();
+  }
+  if (isNaN(hours)) hours = 9;
+  if (isNaN(minutes)) minutes = 0;
+
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes, 0);
 }
 

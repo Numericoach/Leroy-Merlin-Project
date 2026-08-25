@@ -28,7 +28,15 @@ function onSubmit(e?: any): void {
 
     if (sheetName.indexOf("ATTENTE") > -1) {
       Logger.log("Soumission enregistrée dans la liste d'attente : " + sheetName);
-      if (ss) ss.toast("📥 Inscription sur la liste d'attente enregistrée !", "LISTE D'ATTENTE", 5);
+      const data = extractSubmissionData(e);
+      if (data.thisEmail && data.thisSessionid) {
+        try {
+          sendWaitingListMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom);
+        } catch (waitMailErr) {
+          Logger.log("Erreur envoi mail confirmation liste d'attente : " + waitMailErr);
+        }
+      }
+      if (ss) ss.toast("📥 Inscription sur la liste d'attente enregistrée & mail d'attente envoyé !", "LISTE D'ATTENTE", 5);
       return;
     }
 
@@ -441,7 +449,7 @@ function extractSubmissionData(e: any): any {
 /**
  * Vérifie la file d'attente pour une session donnée et notifie la première personne.
  */
-function processWaitingList(sessionId: string): void {
+function processWaitingList(sessionId: string): boolean {
   let sheetAttente = ss ? (ss.getSheetByName("INSCRIPTIONS FILE ATTENTE") || ss.getSheetByName("FILE ATTENTE")) : null;
   
   if (!sheetAttente && ss) {
@@ -457,13 +465,12 @@ function processWaitingList(sessionId: string): void {
 
   if (!sheetAttente) {
     if (ss) ss.toast("❌ Onglet Liste d'attente introuvable !", "DÉBOGAGE", 8);
-    return;
+    return false;
   }
 
   const lastRow = sheetAttente.getLastRow();
   if (lastRow < 2) {
-    if (ss) ss.toast("File d'attente vide pour l'instant.", "DÉBOGAGE", 5);
-    return;
+    return false;
   }
 
   const lastColAttente = sheetAttente.getLastColumn();
@@ -473,6 +480,7 @@ function processWaitingList(sessionId: string): void {
 
   const data = sheetAttente.getRange(2, 1, lastRow - 1, lastColAttente).getValues();
   let personNotified = false;
+  const cleanSessionId = (sessionId || "").toString().trim().toUpperCase();
 
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
@@ -482,10 +490,10 @@ function processWaitingList(sessionId: string): void {
     let email = "";
     
     for (let c = 0; c < row.length; c++) {
-      const val = (row[c] || "").toString().trim();
-      if (val.indexOf(sessionId) > -1) isSessionMatch = true;
-      if (val.indexOf("@") > -1 && val.indexOf(".") > -1 && !email) email = val;
-      if (val.indexOf("Notifié") > -1 || val.indexOf("Inscrit") > -1) isNotified = true;
+      const val = (row[c] || "").toString().trim().toUpperCase();
+      if (val.indexOf(cleanSessionId) > -1) isSessionMatch = true;
+      if (val.indexOf("@") > -1 && val.indexOf(".") > -1 && !email) email = row[c].toString().trim();
+      if (val.indexOf("NOTIFIÉ") > -1 || val.indexOf("INSCRIT") > -1) isNotified = true;
     }
 
     if (isSessionMatch && !isNotified && email) {
@@ -515,7 +523,6 @@ function processWaitingList(sessionId: string): void {
         if (ss) ss.toast("✅ " + email + " inscrit automatiquement & convocation envoyée !", "SUCCÈS", 8);
       } catch (err) {
         Logger.log("Erreur envoi mail confirmation : " + err);
-        // Fallback si la convocation échoue : envoi du mail simple de place disponible
         try {
           sendSpotAvailableMail(sessionId, email, prenom, nom);
           if (ss) ss.toast("✅ Mail d'information envoyé à " + email, "SUCCÈS", 8);
@@ -524,10 +531,14 @@ function processWaitingList(sessionId: string): void {
         }
       }
       
-      // Marquer comme inscrit automatiquement dans la première colonne vide
-      let writeCol = 6;
+      let writeCol = Math.max(lastColAttente, 6);
       for (let c = 0; c < row.length; c++) {
-         if ((row[c] || "").toString().trim() === "") {
+         const strCell = (row[c] || "").toString().trim();
+         if (strCell.indexOf("Inscrit") > -1 || strCell.indexOf("Notifié") > -1) {
+            writeCol = c + 1;
+            break;
+         }
+         if (strCell === "" && c >= 5) {
             writeCol = c + 1;
             break;
          }
@@ -536,12 +547,61 @@ function processWaitingList(sessionId: string): void {
       const timeStr = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm:ss");
       sheetAttente.getRange(i + 2, writeCol).setValue("Inscrit automatiquement le " + timeStr);
       personNotified = true;
-      break; // Une seule personne promue par désinscription
+      break;
     }
   }
 
-  if (!personNotified && ss) {
-    ss.toast("Aucun candidat en attente non-notifié trouvé pour " + sessionId, "DÉBOGAGE", 5);
+  return personNotified;
+}
+
+/**
+ * Parcourt toutes les sessions publiées ayant des places disponibles
+ * et promeut automatiquement les candidats inscrits en liste d'attente.
+ */
+function processAllWaitingLists(): void {
+  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+  if (!sheetSessions) return;
+
+  const lastRow = sheetSessions.getLastRow();
+  if (lastRow < 2) return;
+
+  const sessionsData = sheetSessions.getRange(2, 1, lastRow - 1, 14).getValues();
+  let totalPromoted = 0;
+
+  sessionsData.forEach(row => {
+    const sessionId = (row[1] || "").toString().trim(); // Col B (ID SESSION)
+    const publish = row[10]; // Col K (Publier)
+    const rawRemaining = parseFloat(String(row[12] || "").replace(",", ".")); // Col M (Places Restantes)
+    const nbPlaces = parseFloat(String(row[7] || "").replace(",", ".")); // Col H (NB PLACES)
+    const nbInscrits = parseFloat(String(row[11] || "").replace(",", ".")); // Col L (Nb Inscrits)
+
+    const isPublished = Boolean(publish) && 
+                      String(publish).toUpperCase() !== "FALSE" && 
+                      String(publish).toUpperCase() !== "FAUX" && 
+                      String(publish) !== "0" && 
+                      String(publish).trim() !== "";
+
+    let remainingSeats = 0;
+    if (!isNaN(rawRemaining)) {
+      remainingSeats = rawRemaining;
+    } else if (!isNaN(nbPlaces)) {
+      remainingSeats = nbPlaces - (!isNaN(nbInscrits) ? nbInscrits : 0);
+    }
+
+    if (sessionId && isPublished && remainingSeats > 0) {
+      for (let p = 0; p < remainingSeats; p++) {
+        const promoted = processWaitingList(sessionId);
+        if (promoted) {
+          totalPromoted++;
+        } else {
+          break;
+        }
+      }
+    }
+  });
+
+  if (totalPromoted > 0 && ss) {
+    ss.toast("✅ " + totalPromoted + " candidat(s) promu(s) depuis la liste d'attente !", "LISTE D'ATTENTE", 6);
   }
 }
 

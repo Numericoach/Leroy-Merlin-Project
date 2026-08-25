@@ -163,7 +163,9 @@ function sendConfirmationMail(
       if (lastRow >= 2) {
         const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
         for (let i = 0; i < sessionsValues.length; i++) {
-          if (sessionsValues[i][0] === sessionId) {
+          const currentSesId = (sessionsValues[i][0] || "").toString().trim().toUpperCase();
+          const targetSesId = (sessionId || "").toString().trim().toUpperCase();
+          if (currentSesId === targetSesId) {
             formationTitle = sessionsValues[i][13] || formationTitle;
             if (sessionsValues[i][2]) {
               const d = new Date(sessionsValues[i][2]);

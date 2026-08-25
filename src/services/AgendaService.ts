@@ -272,12 +272,15 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       return null;
     }
 
+    const cleanSessionId = (sessionId || "").toString().trim().toUpperCase();
+
     // 1. Vérifier si l'événement existe déjà spécifiquement dans l'agenda cible actuel
     const lastRowEvt = sheetSessionEvenements.getLastRow();
     if (lastRowEvt >= 2) {
       const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
       for (let i = sessionEvenementValues.length - 1; i >= 0; i--) {
-        if (sessionEvenementValues[i][1] === sessionId) {
+        const storedSessionId = (sessionEvenementValues[i][1] || "").toString().trim().toUpperCase();
+        if (storedSessionId === cleanSessionId) {
           const storedId = sessionEvenementValues[i][2] as string;
           if (storedId) {
             let existingEvent: GoogleAppsScript.Calendar.CalendarEvent | null = null;
@@ -306,13 +309,31 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
     let targetSession: any[] | null = null;
     for (let i = 0; i < sessionsValues.length; i++) {
-      if (sessionsValues[i][0] === sessionId) {
+      if ((sessionsValues[i][0] || "").toString().trim().toUpperCase() === cleanSessionId) {
         targetSession = sessionsValues[i];
         break;
       }
     }
 
     if (!targetSession) return null;
+
+    // 2.5. Recherche de sécurité sur Google Agenda par tag [sessionId] pour RÉUTILISER l'événement au lieu d'en créer un doublon
+    try {
+      const dateDebutSearch = parseDateTime(targetSession[2], targetSession[3]);
+      const searchTag = "[" + cleanSessionId + "]";
+      const timeMin = new Date(dateDebutSearch.getTime() - 24 * 3600 * 1000);
+      const timeMax = new Date(dateDebutSearch.getTime() + 24 * 3600 * 1000);
+      const foundEvents = agenda.getEvents(timeMin, timeMax, { search: searchTag });
+      if (foundEvents && foundEvents.length > 0) {
+        const foundEvt = foundEvents[0];
+        const foundId = foundEvt.getId();
+        sheetSessionEvenements.appendRow([new Date(), sessionId, foundId]);
+        Logger.log("Événement Agenda existant réutilisé par recherche de tag : " + searchTag + " (ID: " + foundId + ")");
+        return foundId;
+      }
+    } catch (searchErr) {
+      Logger.log("Avertissement recherche événement par tag : " + searchErr);
+    }
 
     const sheetFormations = ss ? ss.getSheetByName("FORMATIONS") : null;
     let formationTitle = targetSession[13] || "Formation Leroy Merlin";
@@ -353,7 +374,7 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const description = "<h3>👤 Inscrits et participants (Total : 0) :</h3><ul><li>Aucun participant inscrit pour le moment.</li></ul>";
 
     const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
-    newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
+    newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(true);
 
     // Tenter la génération du lien Google Meet via l'API Calendar v3
     let generatedMeetUrl = "";
@@ -422,6 +443,26 @@ function addParticipantToCalendar(sessionId: string, email: string): boolean {
     if (event) {
       event.addGuest(email);
       Logger.log("Invité ajouté avec succès à Google Agenda : " + email + " pour session " + sessionId);
+
+      // Déclencher l'envoi forcé du mail d'invitation Google Agenda via Calendar Advanced API
+      try {
+        const calendarId = agenda.getId() || "primary";
+        const cleanEvtId = eventId.replace("@google.com", "");
+        if (typeof (globalThis as any).Calendar !== "undefined" && (globalThis as any).Calendar.Events) {
+          const currentEvt = (globalThis as any).Calendar.Events.get(calendarId, cleanEvtId);
+          if (currentEvt) {
+            const attendees = currentEvt.attendees || [];
+            if (!attendees.some((a: any) => a.email && a.email.toLowerCase() === email.toLowerCase())) {
+              attendees.push({ email: email });
+            }
+            (globalThis as any).Calendar.Events.patch({ attendees: attendees }, calendarId, cleanEvtId, { sendUpdates: "all" });
+            Logger.log("Notification d'invitation Google Agenda envoyée (sendUpdates: all) à " + email);
+          }
+        }
+      } catch (calApiErr) {
+        Logger.log("Information envoi mise à jour Google Calendar API : " + calApiErr);
+      }
+
       try {
         updateEventAttendeeListAndDescription(sessionId);
       } catch (updateErr) {
@@ -454,6 +495,22 @@ function removeParticipantFromCalendar(sessionId: string, email: string): boolea
     if (event) {
       event.removeGuest(email);
       Logger.log("Invité retiré avec succès de Google Agenda : " + email + " pour session " + sessionId);
+
+      try {
+        const calendarId = agenda.getId() || "primary";
+        const cleanEvtId = eventId.replace("@google.com", "");
+        if (typeof (globalThis as any).Calendar !== "undefined" && (globalThis as any).Calendar.Events) {
+          const currentEvt = (globalThis as any).Calendar.Events.get(calendarId, cleanEvtId);
+          if (currentEvt && currentEvt.attendees) {
+            const updatedAttendees = currentEvt.attendees.filter((a: any) => !a.email || a.email.toLowerCase() !== email.toLowerCase().trim());
+            (globalThis as any).Calendar.Events.patch({ attendees: updatedAttendees }, calendarId, cleanEvtId, { sendUpdates: "all" });
+            Logger.log("Notification de retrait Google Agenda envoyée (sendUpdates: all) pour " + email);
+          }
+        }
+      } catch (calApiErr) {
+        Logger.log("Information envoi retrait Google Calendar API : " + calApiErr);
+      }
+
       try {
         updateEventAttendeeListAndDescription(sessionId);
       } catch (updateErr) {
@@ -641,16 +698,49 @@ function createEventSession(): void {
   if (ss) ss.toast("📅 Synchronisation/Pré-réservation des événements Google Agenda...", "OUTILS", 5);
 
   let count = 0;
-  const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 1).getValues();
+  const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 10).getValues();
   sessionsValues.forEach(function (row) {
     const sessionId = (row[0] || "").toString().trim();
-    if (sessionId && sessionId !== "") {
+    const dateVal = row[2]; // Col D (DATE)
+    const publish = row[9]; // Col K (Publier)
+
+    if (!sessionId || sessionId.toLowerCase().indexOf("ses-") === -1) return;
+
+    const isPublished = Boolean(publish) && 
+                      String(publish).toUpperCase() !== "FALSE" && 
+                      String(publish).toUpperCase() !== "FAUX" && 
+                      String(publish) !== "0" && 
+                      String(publish).trim() !== "";
+
+    let isPastDate = false;
+    if (dateVal) {
+      let d: Date | null = null;
+      if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+        d = dateVal;
+      } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
+        const parts = dateVal.split('/');
+        if (parts.length === 3) {
+          d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        } else {
+          d = new Date(dateVal);
+        }
+      }
+      if (d && !isNaN(d.getTime())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d.getTime() < today.getTime()) {
+          isPastDate = true;
+        }
+      }
+    }
+
+    if (isPublished && !isPastDate) {
       const evtId = getOrCreateSessionEventId(sessionId);
       if (evtId) count++;
     }
   });
 
-  if (ss) ss.toast("✅ " + count + " événement(s) de session synchronisé(s) et réservé(s) dans Google Agenda !", "OUTILS", 7);
+  if (ss) ss.toast("✅ " + count + " événement(s) à venir synchronisé(s) dans Google Agenda !", "OUTILS", 7);
 }
 
 /**
