@@ -38,21 +38,35 @@ Une interface Web HTML/JS servie par `doGet.js` permet aux utilisateurs de consu
 
 ## Structure des fichiers du projet
 
-- `src/00 - SETTINGS.js` : Initialisation des accès aux feuilles, plages nommées et gestionnaires de cache.
-- `src/05 - INSCRIPTIONS.js` : Logique de réception des formulaires, enregistrement des inscriptions, génération des convocations PDF et envois des e-mails.
-- `src/08 - AGENDA.js` : Synchronisation des sessions avec Google Calendar.
-- `src/10 - ARCHIVES.js` : Fonctions d'archivage.
-- `src/ALERTE.js` : Gestion des alertes e-mail (ex: nombre d'inscrits insuffisant à 3 jours de l'échéance).
-- `src/doGet.js` : Contrôleur de la Web App fournissant l'interface utilisateur.
-- `src/web.html` et `src/MESSAGE.html` : Templates HTML de la Web App et des e-mails.
-- `UCPA - LEROY MERLIN - TABLEAU DE BORD - FORMATIONS (1).xlsx` : Classeur de suivi.
+Le projet est écrit en **TypeScript** et structuré comme suit sous le dossier `src/` :
+
+- `src/config/`
+  - `Settings.ts` : Configuration globale, constantes et accès aux feuilles de calcul / plages nommées.
+- `src/classes/`
+  - `Query.ts` & `Query_utils.ts` : Classes utilitaires pour requêter les données de Sheets de façon robuste.
+- `src/handlers/`
+  - `FormHandler.ts` : Logique de soumission de formulaires (inscriptions, désinscriptions, gestion de la liste d'attente), acquisition des verrous avec `LockService` et mise à jour des options des formulaires.
+  - `triggers.ts` : Fonctions déclencheurs du projet (`onSubmit`, `onEditTrigger`, `autoUpdateFormChoicesTrigger`).
+- `src/services/`
+  - `AgendaService.ts` : Synchronisation thread-safe avec les événements Google Agenda.
+  - `DocGeneratorService.ts` : Génération des convocations à partir du modèle de document Google Docs.
+  - `FormService.ts` : Service facilitant la manipulation de formulaires Google Forms.
+  - `MailService.ts` : Construction et envoi des notifications par e-mail.
+  - `PdfService.ts` : Conversion des fichiers Google Docs en PDF pour envoi en pièce jointe.
+- `src/web/`
+  - `WebApp.ts` : Contrôleur d'application web (`doGet`) servant la Web App.
+  - `CatalogTemplate.html` : Interface web (catalogue des formations disponibles).
+  - `MESSAGE.html` : Contenu HTML pour les e-mails de notification.
+- `src/utils.ts` : Fonctions utilitaires globales.
 
 ---
 
 ## Déploiement des modifications
 
-Pour pousser les mises à jour des fichiers du dossier `src/` vers l'instance Google Apps Script :
+Les fichiers TypeScript du dossier `src/` sont compilés en JavaScript dans le dossier `dist/` avant d'être poussés vers Google Apps Script.
+
+Pour compiler et pousser les modifications :
 
 ```bash
-npx clasp push
+npm run push
 ```

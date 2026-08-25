@@ -49,9 +49,9 @@ Ceci exécutera la fonction `setupTriggers()` qui installe le déclencheur `onFo
 
 ---
 
-## 4. Structure des Fichiers TypeScript
+## 4. Structure des Fichiers TypeScript principaux
 
-- [src/00 - SETTINGS.ts](file:///c:/Project/Leroy-Merlin-Project/src/00%20-%20SETTINGS.ts) : Initialisation du menu NUMERICOACH et gestion des plages nommées.
-- [src/05 - INSCRIPTIONS.ts](file:///c:/Project/Leroy-Merlin-Project/src/05%20-%20INSCRIPTIONS.ts) : Gestion des soumissions `onSubmit`, contrôle `LockService`, mise à jour des choix `updateFormChoices`.
-- [src/08 - AGENDA.ts](file:///c:/Project/Leroy-Merlin-Project/src/08%20-%20AGENDA.ts) : Synchronisation thread-safe des événements Google Agenda.
-- [src/triggers.ts](file:///c:/Project/Leroy-Merlin-Project/src/triggers.ts) : Installation automatisée des déclencheurs Apps Script.
+- [src/config/Settings.ts](file:///c:/Project/Leroy-Merlin-Project/src/config/Settings.ts) : Initialisation du menu NUMERICOACH et gestion des paramètres/plages nommées.
+- [src/handlers/FormHandler.ts](file:///c:/Project/Leroy-Merlin-Project/src/handlers/FormHandler.ts) : Gestion des soumissions `onSubmit`, contrôle `LockService`, et mise à jour des choix.
+- [src/services/AgendaService.ts](file:///c:/Project/Leroy-Merlin-Project/src/services/AgendaService.ts) : Synchronisation thread-safe des événements Google Agenda.
+- [src/handlers/triggers.ts](file:///c:/Project/Leroy-Merlin-Project/src/handlers/triggers.ts) : Installation et gestion automatisée des déclencheurs Apps Script.
