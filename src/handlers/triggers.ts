@@ -53,32 +53,58 @@ function autoUpdateFormChoicesTrigger(): void {
 }
 
 /**
- * Restaure la formule dynamique ArrayFormula dans la cellule B1 de l'onglet SESSIONS.
- * Génère automatiquement les IDs "SES-0001", "SES-0002"... de manière propre et sans "SES-0000".
+ * Assure la présence d'identifiants uniques et stables (SES-XXXX) dans la colonne B de l'onglet SESSIONS.
+ * Au lieu d'utiliser une ArrayFormula qui change si les lignes sont triées ou déplacées, cette fonction
+ * écrit en dur un ID persistant.
  */
 function ensureSessionIds(): void {
   const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
   if (!sheetSessions) return;
 
-  // 1. Nettoyer B2:B pour permettre à l'ARRAYFORMULA de B1 de se développer sans l'erreur "ne pas écraser les données de B2"
   const lastRow = sheetSessions.getLastRow();
-  if (lastRow >= 2) {
-    try {
-      sheetSessions.getRange(2, 2, lastRow - 1, 1).clearContent();
-    } catch (e) {}
+  if (lastRow < 2) return;
+
+  const colId = 2; // Colonne B
+  const colTitre = 3; // Colonne C
+
+  const rangeB = sheetSessions.getRange(2, colId, lastRow - 1, 1);
+  const rangeC = sheetSessions.getRange(2, colTitre, lastRow - 1, 1);
+
+  const ids = rangeB.getValues();
+  const titles = rangeC.getValues();
+
+  let maxIdNum = 0;
+
+  // 1. Déterminer le numéro d'ID le plus élevé existant
+  for (let i = 0; i < ids.length; i++) {
+    const val = (ids[i][0] || "").toString().trim();
+    const match = val.match(/^SES-(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxIdNum) {
+        maxIdNum = num;
+      }
+    }
   }
 
-  // 2. Placer/Restaurer la formule propre ArrayFormula en B1 (ID SESSION)
-  try {
-    const cellB1 = sheetSessions.getRange(1, 2);
-    try {
-      cellB1.setFormula('=ARRAYFORMULA(IF(ROW(C:C)=1; "ID SESSION"; IF(C:C<>""; "SES-" & TEXT(ROW(C:C)-1; "0000"); "")))');
-    } catch (e1) {
-      cellB1.setFormula('=ARRAYFORMULA(IF(ROW(C:C)=1, "ID SESSION", IF(C:C<>"", "SES-" & TEXT(ROW(C:C)-1, "0000"), "")))');
+  let hasChanges = false;
+
+  // 2. Générer des IDs séquentiels stables pour les lignes sans identifiants
+  for (let i = 0; i < ids.length; i++) {
+    const currentId = (ids[i][0] || "").toString().trim();
+    const currentTitle = (titles[i][0] || "").toString().trim();
+
+    if (currentTitle && !currentId) {
+      maxIdNum++;
+      const formattedNum = ("0000" + maxIdNum).slice(-4);
+      ids[i][0] = `SES-${formattedNum}`;
+      hasChanges = true;
     }
-    if (ss) ss.toast("✅ Formule ArrayFormula activée (B2:B nettoyés pour laisser la formule s'étendre) !", "SESSIONS", 5);
-  } catch (e) {
-    Logger.log("Erreur application formule B1 : " + e);
+  }
+
+  if (hasChanges) {
+    rangeB.setValues(ids);
+    if (ss) ss.toast("✅ Identifiants de session stables générés !", "SESSIONS", 5);
   }
 
   // 3. S'assurer que G1 (DUREE) et M1 (PLACES RESTANTES) ne soient pas en #REF! ou #NAME?
@@ -107,8 +133,12 @@ function onEditTrigger(e?: any): void {
   if (!e || !e.range) return;
   try {
     const sheetName = e.range.getSheet().getName();
-    if (sheetName === "SESSIONS" || sheetName === "PARAMETRES") {
-      Logger.log("Modification dans l'onglet " + sheetName + " : synchronisation des événements d'agenda et du formulaire...");
+    const isSessionsOrParams = (sheetName === "SESSIONS" || sheetName === "PARAMETRES");
+    const isInscriptionsOrDesinscriptions = (sheetName === "INSCRIPTIONS" || sheetName.indexOf("DESINSCRIPTION") > -1);
+
+    if (isSessionsOrParams || isInscriptionsOrDesinscriptions) {
+      Logger.log("Modification dans l'onglet " + sheetName + " : traitement des déclencheurs...");
+      
       if (sheetName === "SESSIONS") {
         ensureSessionIds();
         createEventSession();
@@ -118,6 +148,7 @@ function onEditTrigger(e?: any): void {
           Logger.log("Erreur traitement liste d'attente onEdit : " + waitErr);
         }
       }
+      
       try {
         updateFormChoices();
       } catch (formErr) {

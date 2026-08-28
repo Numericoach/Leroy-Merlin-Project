@@ -252,10 +252,15 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
   if (!sessionId) return null;
 
   const lock = LockService.getScriptLock();
-  const hasLock = lock.tryLock(10000); // Attendre max 10 secondes pour acquérir le verrou
+  // Lever une exception ou échouer proprement si le lock ne peut pas être obtenu
+  const hasLock = lock.tryLock(Constants.LOCK.TIMEOUT_MS);
+  if (!hasLock) {
+    Logger.log("Échec getOrCreateSessionEventId : impossible d'acquérir le verrou pour la session " + sessionId);
+    return null;
+  }
 
   try {
-    let sheetSessionEvenements = ss ? ss.getSheetByName("SESSION AGENDA") : null;
+    let sheetSessionEvenements = ss ? ss.getSheetByName(Constants.SHEETS.SESSION_AGENDA || "SESSION AGENDA") : null;
     if (!sheetSessionEvenements && ss) {
       try {
         sheetSessionEvenements = ss.insertSheet("SESSION AGENDA");
@@ -264,7 +269,6 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
         Logger.log("Erreur lors de la création de l'onglet SESSION AGENDA : " + e);
       }
     }
-    if (!sheetSessionEvenements) return null;
 
     const agenda = getTargetCalendar();
     if (!agenda) {
@@ -274,42 +278,24 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
 
     const cleanSessionId = (sessionId || "").toString().trim().toUpperCase();
 
-    // 1. Vérifier si l'événement existe déjà spécifiquement dans l'agenda cible actuel
-    const lastRowEvt = sheetSessionEvenements.getLastRow();
-    if (lastRowEvt >= 2) {
-      const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
-      for (let i = sessionEvenementValues.length - 1; i >= 0; i--) {
-        const storedSessionId = (sessionEvenementValues[i][1] || "").toString().trim().toUpperCase();
-        if (storedSessionId === cleanSessionId) {
-          const storedId = sessionEvenementValues[i][2] as string;
-          if (storedId) {
-            let existingEvent: GoogleAppsScript.Calendar.CalendarEvent | null = null;
-            try {
-              existingEvent = agenda.getEventById(storedId);
-            } catch (e) {}
-            if (!existingEvent && storedId.indexOf("@") === -1) {
-              try {
-                existingEvent = agenda.getEventById(storedId + "@google.com");
-              } catch (e) {}
-            }
-            if (existingEvent) {
-              return storedId;
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Si pas trouvé ou supprimé, créer l'événement dans Google Agenda
+    // 1. Recherche prioritaire : vérifier si l'ID d'événement est déjà renseigné dans l'onglet SESSIONS
     const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
     if (!sheetSessions) return null;
     const lastRow = sheetSessions.getLastRow();
     if (lastRow < 2) return null;
 
-    const sessionsValues = sheetSessions.getRange(2, 2, lastRow - 1, 14).getValues();
+    // Lire de la colonne B (ID SESSION) à la colonne Y (ID EVENEMENT CALENDAR, colonne 25)
+    // 24 colonnes à partir de la colonne 2 (B) permet d'inclure Y (2 + 24 - 1 = 25)
+    const sessionsRange = sheetSessions.getRange(2, 2, lastRow - 1, 24);
+    const sessionsValues = sessionsRange.getValues();
+    let targetRowIndex = -1;
+    let existingEventId = "";
     let targetSession: any[] | null = null;
+
     for (let i = 0; i < sessionsValues.length; i++) {
       if ((sessionsValues[i][0] || "").toString().trim().toUpperCase() === cleanSessionId) {
+        targetRowIndex = i + 2; // Index de ligne physique dans la feuille
+        existingEventId = (sessionsValues[i][23] || "").toString().trim(); // Index 23 de la ligne lue (Col Y)
         targetSession = sessionsValues[i];
         break;
       }
@@ -317,7 +303,67 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
 
     if (!targetSession) return null;
 
-    // 2.5. Recherche de sécurité sur Google Agenda par tag [sessionId] pour RÉUTILISER l'événement au lieu d'en créer un doublon
+    const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
+    const dateFin = parseDateTime(targetSession[2], targetSession[4]);
+
+    // Si on a déjà un ID d'événement dans SESSIONS, on vérifie s'il existe toujours dans Google Agenda
+    if (existingEventId) {
+      let existingEvent: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+      try {
+        existingEvent = agenda.getEventById(existingEventId);
+      } catch (e) {}
+      if (!existingEvent && existingEventId.indexOf("@") === -1) {
+        try {
+          existingEvent = agenda.getEventById(existingEventId + "@google.com");
+        } catch (e) {}
+      }
+      if (existingEvent) {
+        // Mettre à jour la date/heure si elle a changé dans le Sheets
+        if (existingEvent.getStartTime().getTime() !== dateDebut.getTime() ||
+            existingEvent.getEndTime().getTime() !== dateFin.getTime()) {
+          existingEvent.setTime(dateDebut, dateFin);
+          Logger.log("Mise à jour de la date/heure de l'événement existant " + existingEventId + " pour la session " + sessionId);
+        }
+        return existingEventId;
+      }
+    }
+
+    // 2. Recherche secondaire dans la table de correspondance SESSION AGENDA
+    if (sheetSessionEvenements) {
+      const lastRowEvt = sheetSessionEvenements.getLastRow();
+      if (lastRowEvt >= 2) {
+        const sessionEvenementValues = sheetSessionEvenements.getRange(2, 1, lastRowEvt - 1, 3).getValues();
+        for (let i = sessionEvenementValues.length - 1; i >= 0; i--) {
+          const storedSessionId = (sessionEvenementValues[i][1] || "").toString().trim().toUpperCase();
+          if (storedSessionId === cleanSessionId) {
+            const storedId = (sessionEvenementValues[i][2] || "").toString().trim();
+            if (storedId) {
+              let existingEvent: GoogleAppsScript.Calendar.CalendarEvent | null = null;
+              try {
+                existingEvent = agenda.getEventById(storedId);
+              } catch (e) {}
+              if (!existingEvent && storedId.indexOf("@") === -1) {
+                try {
+                  existingEvent = agenda.getEventById(storedId + "@google.com");
+                } catch (e) {}
+              }
+              if (existingEvent) {
+                // Mettre à jour la date/heure si elle a changé dans le Sheets
+                if (existingEvent.getStartTime().getTime() !== dateDebut.getTime() ||
+                    existingEvent.getEndTime().getTime() !== dateFin.getTime()) {
+                  existingEvent.setTime(dateDebut, dateFin);
+                  Logger.log("Mise à jour de la date/heure de l'événement existant " + storedId + " pour la session " + sessionId);
+                }
+                // NE PAS écrire dans l'onglet SESSIONS car la colonne N est gérée par une formule ArrayFormula
+                return storedId;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Recherche de sécurité sur Google Agenda par tag [sessionId]
     try {
       const dateDebutSearch = parseDateTime(targetSession[2], targetSession[3]);
       const searchTag = "[" + cleanSessionId + "]";
@@ -327,7 +373,10 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       if (foundEvents && foundEvents.length > 0) {
         const foundEvt = foundEvents[0];
         const foundId = foundEvt.getId();
-        sheetSessionEvenements.appendRow([new Date(), sessionId, foundId]);
+        if (sheetSessionEvenements) {
+          sheetSessionEvenements.appendRow([new Date(), sessionId, foundId]);
+        }
+        // NE PAS écrire dans l'onglet SESSIONS car la colonne N est gérée par une formule ArrayFormula
         Logger.log("Événement Agenda existant réutilisé par recherche de tag : " + searchTag + " (ID: " + foundId + ")");
         return foundId;
       }
@@ -335,6 +384,7 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       Logger.log("Avertissement recherche événement par tag : " + searchErr);
     }
 
+    // 4. Création du nouvel événement
     const sheetFormations = ss ? ss.getSheetByName("FORMATIONS") : null;
     let formationTitle = targetSession[13] || "Formation Leroy Merlin";
     let formationDescription = "";
@@ -359,8 +409,7 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       }
     }
 
-    const dateDebut = parseDateTime(targetSession[2], targetSession[3]);
-    const dateFin = parseDateTime(targetSession[2], targetSession[4]);
+
 
     const sessionModuleColC = targetSession[1] || "";
     const sessionModuleColO = targetSession[13] || "";
@@ -376,7 +425,6 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     const newEvent = agenda.createEvent(eventTitle, dateDebut, dateFin, { description: description, sendInvites: true });
     newEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(true);
 
-    // Tenter la génération du lien Google Meet via l'API Calendar v3
     let generatedMeetUrl = "";
     try {
       const calendarId = agenda.getId() || "primary";
@@ -399,7 +447,6 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
       Logger.log("Information création visioconférence Google Meet : " + meetErr);
     }
 
-    // Si un lien Google Meet a été généré, l'ajouter à la description
     if (generatedMeetUrl) {
       try {
         const updatedDesc = "<b>📹 Visioconférence Google Meet :</b> <a href='" + generatedMeetUrl + "'>" + generatedMeetUrl + "</a><p></p>" + description;
@@ -408,15 +455,19 @@ function getOrCreateSessionEventId(sessionId: string): string | null {
     }
 
     const newEventId = newEvent.getId();
-    sheetSessionEvenements.appendRow([new Date(), sessionId, newEventId]);
-    Logger.log("Créneau d'accompagnement pré-réservé dans Google Agenda : " + sessionId + " (ID: " + newEventId + ")");
+    
+    // Écrire l'ID d'événement créé uniquement dans SESSION AGENDA (pas dans SESSIONS car géré par formule)
+    if (sheetSessionEvenements) {
+      sheetSessionEvenements.appendRow([new Date(), sessionId, newEventId]);
+    }
 
+    Logger.log("Créneau d'accompagnement pré-réservé dans Google Agenda : " + sessionId + " (ID: " + newEventId + ")");
     return newEventId;
   } catch (err) {
     Logger.log("Erreur dans getOrCreateSessionEventId : " + err);
     return null;
   } finally {
-    if (hasLock) lock.releaseLock();
+    lock.releaseLock();
   }
 }
 

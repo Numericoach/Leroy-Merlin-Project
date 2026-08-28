@@ -1,6 +1,17 @@
+interface SubmissionData {
+  thisTime: string | Date;
+  thisEmail: string;
+  thisSession: string;
+  thisSessionid: string;
+  thisCivilite: string;
+  thisPrenom: string;
+  thisNom: string;
+  thisNbParticipants: number;
+}
+
 /**
- * Déclencheur sur soumission du formulaire d'inscription
- * Protégé par LockService contre les soumissions simultanées
+ * Déclencheur principal sur soumission du formulaire d'inscription.
+ * Protégé par LockService contre les soumissions simultanées.
  */
 function onSubmit(e?: any): void {
   let lock: GoogleAppsScript.Lock.Lock | null = null;
@@ -9,9 +20,13 @@ function onSubmit(e?: any): void {
   try {
     try {
       lock = LockService.getScriptLock();
-      hasLock = lock.tryLock(10000);
+      hasLock = lock.tryLock(Constants.LOCK.TIMEOUT_MS);
     } catch (lockErr) {
       Logger.log("Avertissement LockService : " + lockErr);
+    }
+
+    if (!hasLock) {
+      throw new Error("Impossible d'obtenir le verrou exclusif LockService pour traiter l'inscription. Soumission annulée.");
     }
 
     // 1. DÉTECTER SI C'EST LA LISTE D'ATTENTE OU LA DÉSINSCRIPTION
@@ -26,85 +41,169 @@ function onSubmit(e?: any): void {
       } catch (err) {}
     }
 
+    const data: SubmissionData = extractSubmissionData(e);
+
     if (sheetName.indexOf("ATTENTE") > -1) {
-      Logger.log("Soumission enregistrée dans la liste d'attente : " + sheetName);
-      const data = extractSubmissionData(e);
-      if (data.thisEmail && data.thisSessionid) {
-        try {
-          sendWaitingListMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom);
-        } catch (waitMailErr) {
-          Logger.log("Erreur envoi mail confirmation liste d'attente : " + waitMailErr);
-        }
-      }
-      if (ss) ss.toast("📥 Inscription sur la liste d'attente enregistrée & mail d'attente envoyé !", "LISTE D'ATTENTE", 5);
-      return;
+      handleWaitingListSubmission(data);
+    } else if (isDesinscription) {
+      handleCancellationSubmission(data);
+    } else {
+      handleRegistrationSubmission(data, e);
     }
 
-    if (isDesinscription) {
-      if (ss) ss.toast("🚪 Désinscription détectée. Retrait du participant et mise à jour de l'agenda...", "DÉSINSCRIPTION", 5);
-      const data = extractSubmissionData(e);
-      if (data.thisSessionid && data.thisEmail) {
-        // 1. Supprimer de la feuille INSCRIPTIONS
-        if (sheetInscriptions) {
-          const lastRowInsc = sheetInscriptions.getLastRow();
-          if (lastRowInsc >= 2) {
-            const rows = sheetInscriptions.getRange(2, 1, lastRowInsc - 1, 3).getValues();
-            for (let i = rows.length - 1; i >= 0; i--) {
-              const rowSes = (rows[i][1] || "").toString().trim();
-              const rowEmail = (rows[i][2] || "").toString().trim().toLowerCase();
-              if (rowSes === data.thisSessionid && rowEmail === data.thisEmail.toLowerCase()) {
-                sheetInscriptions.deleteRow(i + 2);
-                Logger.log("Ligne d'inscription supprimée pour " + data.thisEmail + " - session " + data.thisSessionid);
-              }
-            }
+  } catch (err) {
+    Logger.log("Erreur critique dans onSubmit : " + err);
+  } finally {
+    if (hasLock && lock) {
+      try {
+        lock.releaseLock();
+      } catch (relErr) {}
+    }
+  }
+}
+
+/**
+ * Gère les soumissions sur les onglets de liste d'attente.
+ */
+function handleWaitingListSubmission(data: SubmissionData): void {
+  Logger.log("Soumission enregistrée dans la liste d'attente pour la session " + data.thisSessionid);
+  if (data.thisEmail && data.thisSessionid) {
+    try {
+      sendWaitingListMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom);
+    } catch (waitMailErr) {
+      Logger.log("Erreur envoi mail confirmation liste d'attente : " + waitMailErr);
+    }
+  }
+  if (ss) ss.toast("📥 Inscription sur la liste d'attente enregistrée & mail d'attente envoyé !", "LISTE D'ATTENTE", 5);
+}
+
+/**
+ * Gère les demandes de désinscription.
+ */
+function handleCancellationSubmission(data: SubmissionData): void {
+  if (ss) ss.toast("🚪 Désinscription détectée. Retrait du participant et mise à jour de l'agenda...", "DÉSINSCRIPTION", 5);
+  
+  if (data.thisSessionid && data.thisEmail) {
+    // 1. Supprimer de la feuille INSCRIPTIONS
+    const sheetInsc = getSheetInscriptions();
+    if (sheetInsc) {
+      const lastRowInsc = sheetInsc.getLastRow();
+      if (lastRowInsc >= 2) {
+        const rows = sheetInsc.getRange(2, 1, lastRowInsc - 1, 3).getValues();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const rowSes = (rows[i][1] || "").toString().trim();
+          const rowEmail = (rows[i][2] || "").toString().trim().toLowerCase();
+          if (rowSes === data.thisSessionid && rowEmail === data.thisEmail.toLowerCase()) {
+            sheetInsc.deleteRow(i + 2);
+            Logger.log("Ligne d'inscription supprimée pour " + data.thisEmail + " - session " + data.thisSessionid);
           }
         }
-
-        // 2. Retirer de Google Agenda (removeGuest) et rafraîchir la description et le titre (nb d'inscrits)
-        try {
-          removeParticipantFromCalendar(data.thisSessionid, data.thisEmail);
-        } catch (agendaErr) {
-          Logger.log("Avertissement retrait agenda : " + agendaErr);
-        }
-
-        if (ss) ss.toast("✅ Participant " + data.thisEmail + " retiré de l'agenda pour la session " + data.thisSessionid, "SUCCÈS", 6);
-        Logger.log("Désinscription traitée pour la session " + data.thisSessionid);
-        processWaitingList(data.thisSessionid);
-
-        try {
-          updateFormChoices();
-        } catch (formErr) {
-          Logger.log("Avertissement mise à jour formulaires : " + formErr);
-        }
-      } else {
-        if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "AVERTISSEMENT", 8);
       }
-      return;
     }
 
-    const data = extractSubmissionData(e);
+    // 2. Retirer de Google Agenda (removeGuest) et rafraîchir la description et le titre (nb d'inscrits)
+    try {
+      removeParticipantFromCalendar(data.thisSessionid, data.thisEmail);
+    } catch (agendaErr) {
+      Logger.log("Avertissement retrait agenda : " + agendaErr);
+    }
+
+    if (ss) ss.toast("✅ Participant " + data.thisEmail + " retiré de l'agenda pour la session " + data.thisSessionid, "SUCCÈS", 6);
+    Logger.log("Désinscription traitée pour la session " + data.thisSessionid);
     
-    if (!data.thisSessionid || !data.thisEmail) {
-      Logger.log("Données manquantes (Email: " + data.thisEmail + ", Session: " + data.thisSessionid + ")");
-      return;
+    // Essayer de promouvoir la première personne en liste d'attente
+    processWaitingList(data.thisSessionid);
+
+    try {
+      updateFormChoices();
+    } catch (formErr) {
+      Logger.log("Avertissement mise à jour formulaires : " + formErr);
     }
+  } else {
+    if (ss) ss.toast("❌ Impossible de trouver l'ID de session ou l'email dans la désinscription.", "AVERTISSEMENT", 8);
+  }
+}
 
-    // 2. VÉRIFIER LES PLACES RESTANTES ET CHARGER LES DÉTAILS DE LA SESSION
-    const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
-    let remainingSeatsAfterForm = 0;
-    let sessionFound = false;
-    let sessionDetails: any = null;
+/**
+ * Gère une inscription classique à une session de formation.
+ */
+function handleRegistrationSubmission(data: SubmissionData, e?: any): void {
+  if (!data.thisSessionid || !data.thisEmail) {
+    Logger.log("Données manquantes (Email: " + data.thisEmail + ", Session: " + data.thisSessionid + ")");
+    return;
+  }
 
-    if (sheetSessions) {
-      const lastRowSessions = sheetSessions.getLastRow();
-      if (lastRowSessions >= 2) {
-        const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 14).getValues();
+  // 1. VÉRIFIER LES PLACES RESTANTES ET CHARGER LES DÉTAILS DE LA SESSION
+  const sheetSessions = ss ? ss.getSheetByName("SESSIONS") : null;
+  let remainingSeatsAfterForm = 0;
+  let sessionFound = false;
+  let sessionDetails: any = null;
+
+  if (sheetSessions) {
+    const lastRowSessions = sheetSessions.getLastRow();
+    if (lastRowSessions >= 2) {
+      const sessionsData = sheetSessions.getRange(2, 2, lastRowSessions - 1, 14).getValues();
+      for (let i = 0; i < sessionsData.length; i++) {
+        const idInSheet = (sessionsData[i][0] || "").toString().trim();
+        if (idInSheet === data.thisSessionid) {
+          remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
+          sessionFound = true;
+          
+          const dateVal = sessionsData[i][2];
+          const hdVal = sessionsData[i][3];
+          const hfVal = sessionsData[i][4];
+          let dateStr = "";
+          let heureDebutStr = "";
+          let heureFinStr = "";
+          if (dateVal) {
+            const d = new Date(dateVal);
+            if (!isNaN(d.getTime())) {
+              dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+            }
+          }
+          if (hdVal) {
+            const hd = new Date(hdVal);
+            if (!isNaN(hd.getTime())) {
+              heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
+            }
+          }
+          if (hfVal) {
+            const hf = new Date(hfVal);
+            if (!isNaN(hf.getTime())) {
+              heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
+            }
+          }
+
+          sessionDetails = {
+            formationTitle: sessionsData[i][13] || "Formation Leroy Merlin",
+            dateStr: dateStr,
+            heureDebutStr: heureDebutStr,
+            heureFinStr: heureFinStr,
+            lieuStr: sessionsData[i][7] || "",
+            infoCompStr: sessionsData[i][8] || ""
+          };
+          break;
+        }
+      }
+
+      // Recherche par comparaison si l'ID exact n'est pas dans des crochets
+      if (!sessionFound) {
+        const searchLower = data.thisSession.toLowerCase();
         for (let i = 0; i < sessionsData.length; i++) {
           const idInSheet = (sessionsData[i][0] || "").toString().trim();
-          if (idInSheet === data.thisSessionid) {
-            remainingSeatsAfterForm = Number(sessionsData[i][11]); // Colonne M (Places Restantes)
+          const formationInSheet = (sessionsData[i][1] || "").toString().trim().toLowerCase();
+          const infoCompInSheet = (sessionsData[i][8] || "").toString().trim().toLowerCase();
+
+          if (idInSheet && (
+            searchLower.indexOf(idInSheet.toLowerCase()) > -1 ||
+            (infoCompInSheet && searchLower.indexOf("avec pratique") > -1 && infoCompInSheet.indexOf("avec pratique") > -1) ||
+            (infoCompInSheet && searchLower.indexOf("sans pratique") > -1 && infoCompInSheet.indexOf("sans pratique") > -1) ||
+            (formationInSheet && searchLower.indexOf(formationInSheet) > -1)
+          )) {
+            data.thisSessionid = idInSheet;
+            remainingSeatsAfterForm = Number(sessionsData[i][11]);
             sessionFound = true;
-            
+
             const dateVal = sessionsData[i][2];
             const hdVal = sessionsData[i][3];
             const hfVal = sessionsData[i][4];
@@ -113,21 +212,15 @@ function onSubmit(e?: any): void {
             let heureFinStr = "";
             if (dateVal) {
               const d = new Date(dateVal);
-              if (!isNaN(d.getTime())) {
-                dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
-              }
+              if (!isNaN(d.getTime())) dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
             }
             if (hdVal) {
               const hd = new Date(hdVal);
-              if (!isNaN(hd.getTime())) {
-                heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
-              }
+              if (!isNaN(hd.getTime())) heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
             }
             if (hfVal) {
               const hf = new Date(hfVal);
-              if (!isNaN(hf.getTime())) {
-                heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
-              }
+              if (!isNaN(hf.getTime())) heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
             }
 
             sessionDetails = {
@@ -141,152 +234,93 @@ function onSubmit(e?: any): void {
             break;
           }
         }
-
-        // Recherche par comparaison si l'ID exact n'est pas dans des crochets
-        if (!sessionFound) {
-          const searchLower = data.thisSession.toLowerCase();
-          for (let i = 0; i < sessionsData.length; i++) {
-            const idInSheet = (sessionsData[i][0] || "").toString().trim();
-            const formationInSheet = (sessionsData[i][1] || "").toString().trim().toLowerCase();
-            const infoCompInSheet = (sessionsData[i][8] || "").toString().trim().toLowerCase();
-
-            if (idInSheet && (
-              searchLower.indexOf(idInSheet.toLowerCase()) > -1 ||
-              (infoCompInSheet && searchLower.indexOf("avec pratique") > -1 && infoCompInSheet.indexOf("avec pratique") > -1) ||
-              (infoCompInSheet && searchLower.indexOf("sans pratique") > -1 && infoCompInSheet.indexOf("sans pratique") > -1) ||
-              (formationInSheet && searchLower.indexOf(formationInSheet) > -1)
-            )) {
-              data.thisSessionid = idInSheet;
-              remainingSeatsAfterForm = Number(sessionsData[i][11]);
-              sessionFound = true;
-
-              const dateVal = sessionsData[i][2];
-              const hdVal = sessionsData[i][3];
-              const hfVal = sessionsData[i][4];
-              let dateStr = "";
-              let heureDebutStr = "";
-              let heureFinStr = "";
-              if (dateVal) {
-                const d = new Date(dateVal);
-                if (!isNaN(d.getTime())) dateStr = d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
-              }
-              if (hdVal) {
-                const hd = new Date(hdVal);
-                if (!isNaN(hd.getTime())) heureDebutStr = hd.getHours() + "h" + (hd.getMinutes() < 10 ? "0" : "") + hd.getMinutes();
-              }
-              if (hfVal) {
-                const hf = new Date(hfVal);
-                if (!isNaN(hf.getTime())) heureFinStr = hf.getHours() + "h" + (hf.getMinutes() < 10 ? "0" : "") + hf.getMinutes();
-              }
-
-              sessionDetails = {
-                formationTitle: sessionsData[i][13] || "Formation Leroy Merlin",
-                dateStr: dateStr,
-                heureDebutStr: heureDebutStr,
-                heureFinStr: heureFinStr,
-                lieuStr: sessionsData[i][7] || "",
-                infoCompStr: sessionsData[i][8] || ""
-              };
-              break;
-            }
-          }
-        }
       }
     }
+  }
 
-    if (!sessionFound) {
-      Logger.log("Avertissement : ID Session " + data.thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
-      remainingSeatsAfterForm = 999; // Défaut permissif pour ne pas bloquer l'inscription
-    }
+  if (!sessionFound) {
+    Logger.log("Avertissement : ID Session " + data.thisSessionid + " non trouvé dans SESSIONS. Passage par défaut.");
+    remainingSeatsAfterForm = 999;
+  }
 
-    // Si remainingSeatsAfterForm <= 0, cela signifie que la session est complète !
-    if (remainingSeatsAfterForm <= 0) {
-      Logger.log("Inscription refusée : session complète pour " + data.thisSessionid);
-      if (ss) ss.toast("⚠️ Session " + data.thisSessionid + " complète ! Redirection vers la liste d'attente...", "INFO", 6);
-      
-      // SUPPRIMER LA LIGNE EN TROP DE INSCRIPTIONSS POUR CONSERVER UN COMPTEUR PROPRE
-      if (e && e.range) {
-        try {
-          e.range.getSheet().deleteRow(e.range.getRow());
-          Logger.log("Ligne d'inscription refusée supprimée de " + e.range.getSheet().getName() + " à la ligne " + e.range.getRow());
-        } catch (delErr) {
-          Logger.log("Erreur lors de la suppression de la ligne refusée : " + delErr);
-        }
-      }
-
-      try {
-        sendWaitingListMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom);
-      } catch (waitErr) {
-        Logger.log("Erreur lors de l'envoi de l'e-mail de liste d'attente : " + waitErr);
-      }
-      return;
-    }
-
-    // 3. VÉRIFIER SI DÉJÀ INSCRIT SOUS VERROU
-    if (!sheetInscriptions) return;
-    const maxRows = sheetInscriptions.getMaxRows();
-    let verif: any[][] = [];
-    if (maxRows > 1) {
-      const sessionsEmail = sheetInscriptions.getRange(2, 2, maxRows - 1, 2).getValues();
-      const targetSes = (data.thisSessionid || "").trim().toUpperCase();
-      const targetEmail = (data.thisEmail || "").toString().trim().toLowerCase();
-      verif = sessionsEmail.filter(row => {
-        const rowSes = (row[0] || "").toString().trim().toUpperCase();
-        const rowEmail = (row[1] || "").toString().trim().toLowerCase();
-        return rowSes === targetSes && rowEmail === targetEmail;
-      });
-    }
+  // Si remainingSeatsAfterForm <= 0, la session est complète
+  if (remainingSeatsAfterForm <= 0) {
+    Logger.log("Inscription refusée : session complète pour " + data.thisSessionid);
+    if (ss) ss.toast("⚠️ Session " + data.thisSessionid + " complète ! Redirection vers la liste d'attente...", "INFO", 6);
     
-    if (verif.length > 0) {
-      Logger.log("Déjà inscrit : " + data.thisEmail + " à " + data.thisSessionid);
-      if (ss) ss.toast("ℹ️ " + data.thisEmail + " est déjà inscrit(e) à la session " + data.thisSessionid + ". Ligne en doublon supprimée.", "INFO", 7);
-      
-      // SUPPRIMER LA LIGNE EN DOUBLON DE LA FEUILLE DE RÉPONSES
-      if (e && e.range) {
-        try {
-          e.range.getSheet().deleteRow(e.range.getRow());
-          Logger.log("Ligne d'inscription en doublon supprimée de " + e.range.getSheet().getName() + " à la ligne " + e.range.getRow());
-        } catch (delErr) {
-          Logger.log("Erreur lors de la suppression de la ligne en doublon : " + delErr);
-        }
-      }
-      return;
-    }
-
-    // 4. INSCRIPTION DANS LE SHEETS AVEC L'HORODATEUR EXACT DU FORMULAIRE
-    inscription(data.thisTime, data.thisSessionid, data.thisEmail, data.thisNbParticipants);
-
-    // 5. FONCTION PRINCIPALE : AJOUT DANS GOOGLE AGENDA
-    try {
-      addParticipantToCalendar(data.thisSessionid, data.thisEmail);
-    } catch (agendaErr) {
-      Logger.log("Avertissement : échec de l'ajout à l'agenda : " + agendaErr);
-    }
-
-    // 6. ENVOI DE LA CONVOCATION / CONFIRMATION
-    try {
-      sendConfirmationMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom, data.thisCivilite, data.thisNbParticipants, sessionDetails);
-      if (ss) ss.toast("✅ Inscription validée ! Convocation envoyée à " + data.thisEmail, "SUCCÈS", 7);
-    } catch (mailErr) {
-      Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
-      if (ss) ss.toast("⚠️ Inscription enregistrée mais échec d'envoi du mail : " + mailErr, "AVERTISSEMENT", 7);
-    }
-
-    // 7. RAFRAÎCHIR AUTOMATIQUEMENT LES CHOIX DE SESSIONS DANS LES FORMULAIRES
-    try {
-      updateFormChoices();
-    } catch (syncErr) {
-      Logger.log("Avertissement rafraîchissement des formulaires : " + syncErr);
-    }
-    
-  } catch (err) {
-    Logger.log("Erreur critique dans onSubmit : " + err);
-  } finally {
-    if (hasLock && lock) {
+    // Supprimer la ligne de soumission pour conserver un compteur propre
+    if (e && e.range) {
       try {
-        lock.releaseLock();
-      } catch (relErr) {}
+        e.range.getSheet().deleteRow(e.range.getRow());
+        Logger.log("Ligne d'inscription refusée supprimée de la feuille à la ligne " + e.range.getRow());
+      } catch (delErr) {
+        Logger.log("Erreur lors de la suppression de la ligne refusée : " + delErr);
+      }
     }
+
+    try {
+      sendWaitingListMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom);
+    } catch (waitErr) {
+      Logger.log("Erreur lors de l'envoi de l'e-mail de liste d'attente : " + waitErr);
+    }
+    return;
+  }
+
+  // 2. VÉRIFIER SI DÉJÀ INSCRIT
+  const sheetInsc = getSheetInscriptions();
+  if (!sheetInsc) return;
+  const maxRows = sheetInsc.getMaxRows();
+  let verif: any[][] = [];
+  if (maxRows > 1) {
+    const sessionsEmail = sheetInsc.getRange(2, 2, maxRows - 1, 2).getValues();
+    const targetSes = (data.thisSessionid || "").trim().toUpperCase();
+    const targetEmail = (data.thisEmail || "").toString().trim().toLowerCase();
+    verif = sessionsEmail.filter(row => {
+      const rowSes = (row[0] || "").toString().trim().toUpperCase();
+      const rowEmail = (row[1] || "").toString().trim().toLowerCase();
+      return rowSes === targetSes && rowEmail === targetEmail;
+    });
+  }
+  
+  if (verif.length > 0) {
+    Logger.log("Déjà inscrit : " + data.thisEmail + " à " + data.thisSessionid);
+    if (ss) ss.toast("ℹ️ " + data.thisEmail + " est déjà inscrit(e) à la session " + data.thisSessionid + ". Doublon ignoré.", "INFO", 7);
+    
+    if (e && e.range) {
+      try {
+        e.range.getSheet().deleteRow(e.range.getRow());
+        Logger.log("Ligne d'inscription en doublon supprimée à la ligne " + e.range.getRow());
+      } catch (delErr) {
+        Logger.log("Erreur lors de la suppression de la ligne en doublon : " + delErr);
+      }
+    }
+    return;
+  }
+
+  // 3. INSCRIPTION DANS LE SHEETS
+  inscription(data.thisTime, data.thisSessionid, data.thisEmail, data.thisNbParticipants);
+
+  // 4. AJOUT DANS GOOGLE AGENDA
+  try {
+    addParticipantToCalendar(data.thisSessionid, data.thisEmail);
+  } catch (agendaErr) {
+    Logger.log("Avertissement : échec de l'ajout à l'agenda : " + agendaErr);
+  }
+
+  // 5. ENVOI DE LA CONVOCATION / CONFIRMATION
+  try {
+    sendConfirmationMail(data.thisSessionid, data.thisEmail, data.thisPrenom, data.thisNom, data.thisCivilite, data.thisNbParticipants, sessionDetails);
+    if (ss) ss.toast("✅ Inscription validée ! Convocation envoyée à " + data.thisEmail, "SUCCÈS", 7);
+  } catch (mailErr) {
+    Logger.log("Avertissement : échec de l'envoi d'e-mail : " + mailErr);
+    if (ss) ss.toast("⚠️ Inscription enregistrée mais échec d'envoi du mail : " + mailErr, "AVERTISSEMENT", 7);
+  }
+
+  // 6. RAFRAÎCHIR AUTOMATIQUEMENT LES CHOIX DE SESSIONS DANS LES FORMULAIRES
+  try {
+    updateFormChoices();
+  } catch (syncErr) {
+    Logger.log("Avertissement rafraîchissement des formulaires : " + syncErr);
   }
 }
 

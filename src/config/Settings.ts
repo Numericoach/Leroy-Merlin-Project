@@ -1,12 +1,54 @@
-// Configuration globale et variables réutilisables
+// Cache d'instance pour éviter de rappeler l'API plusieurs fois lors d'une même exécution
+let _ssCache: GoogleAppsScript.Spreadsheet.Spreadsheet | null = null;
+
+// Déclarations globales pour le compilateur TypeScript
+declare var ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null;
+declare var sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null;
+declare var sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null;
+
 function getActiveSpreadsheetRobust(): GoogleAppsScript.Spreadsheet.Spreadsheet | null {
   if (typeof SpreadsheetApp === 'undefined') return null;
   return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.getActive();
 }
 
-const ss: GoogleAppsScript.Spreadsheet.Spreadsheet | null = getActiveSpreadsheetRobust();
-const sheetParametres: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("PARAMETRES") : null;
-const sheetInscriptions: GoogleAppsScript.Spreadsheet.Sheet | null = ss ? ss.getSheetByName("INSCRIPTIONS") : null;
+function getSs(): GoogleAppsScript.Spreadsheet.Spreadsheet | null {
+  if (!_ssCache) {
+    _ssCache = getActiveSpreadsheetRobust();
+  }
+  return _ssCache;
+}
+
+function getSheetParametres(): GoogleAppsScript.Spreadsheet.Sheet | null {
+  const activeSs = getSs();
+  return activeSs ? activeSs.getSheetByName("PARAMETRES") : null;
+}
+
+function getSheetInscriptions(): GoogleAppsScript.Spreadsheet.Sheet | null {
+  const activeSs = getSs();
+  return activeSs ? activeSs.getSheetByName("INSCRIPTIONS") : null;
+}
+
+// Pour des raisons de compatibilité ascendante avec les scripts existants, nous définissons des getters sur l'objet global
+Object.defineProperty(globalThis, 'ss', {
+  get() {
+    return getSs();
+  },
+  configurable: true
+});
+
+Object.defineProperty(globalThis, 'sheetParametres', {
+  get() {
+    return getSheetParametres();
+  },
+  configurable: true
+});
+
+Object.defineProperty(globalThis, 'sheetInscriptions', {
+  get() {
+    return getSheetInscriptions();
+  },
+  configurable: true
+});
 
 let paramCache: Map<string, string> | null = null;
 
